@@ -1,4 +1,3 @@
-// tokens.hpp
 #ifndef TOKENS_HPP
 #define TOKENS_HPP
 #include <string>
@@ -6,20 +5,20 @@
 #include <stdexcept>
 
 enum class TokenType : int {
-    TOKEN_INT = 0,     // literales enteros
+    TOKEN_INT = 0,     // integers
     TOKEN_PLUS,        // '+'
     TOKEN_MINUS,       // '-'
     TOKEN_STAR,        // '*'
     TOKEN_SLASH,       // '/'
     TOKEN_LPAREN,      // '('
     TOKEN_RPAREN,      // ')'
-    //TOKEN_WHITESPACE,  // espacios (usualmente 'skip' = true)
-    TOKEN_UNKNOWN      // fallback (si quieres)
+    //TOKEN_WHITESPACE,  // spaces
+    TOKEN_UNKNOWN      // fallback
 };
 
 
 enum class RegexTokenType {
-    Literal,        // símbolo del alfabeto
+    Literal,        // alphabet symbol
     Union,          // |
     Concat,         // .
     Star,           // *
