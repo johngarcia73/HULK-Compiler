@@ -17,8 +17,11 @@ To keep things mathematically clear and easy to read, compiler engineers use a s
 * `*` **(Kleene Star):** Means "zero or more times".
 * `+` **(Plus):** Means "one or more times".
 * `?` **(Optional):** Means "zero or one time".
-* `()` **(Grouping):** Groups symbols together to apply operators like `*` or `?` to the whole group.
+* `()` **(Grouping):** Groups symbols together to apply operators like `*` or `?` to 
+the whole group.
+* `-` **(Set Difference,):** meaning that the construct on the left excludes any strings that match the construct on the right.
 * `"..."` or `'...'`: Literal characters that must appear exactly as written.
-* `,` or ` `:Concatenation of symbols;
+* `,` or ` `:Concatenation of symbols.
+
 
 
