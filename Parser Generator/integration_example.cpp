@@ -7,7 +7,8 @@
 #include "grammar.hpp"
 #include "lalr_builder.hpp"
 #include "parser_interface.hpp"
-#include "ast_node.hpp"   
+#include "ast_node.hpp"
+#include "genparser.hpp"
 #include <iostream>
 #include <memory>
 #include <vector>
@@ -17,35 +18,22 @@
 int main() {
     std::cout << "\n=== LALR(1) Parser - AST Integration Example ===\n\n";
 
-    // Create grammar
-    Grammar grammar;
+    // Create grammar from .y file
+    Grammar grammar = build_grammar_from_file("integration_grammar.y");
 
-    // Add terminals (from lexer)
-    uint32_t NUMBER = grammar.symtab.add(SymbolKind::Terminal, "number");
-    uint32_t PLUS   = grammar.symtab.add(SymbolKind::Terminal, "+");
-    uint32_t TIMES  = grammar.symtab.add(SymbolKind::Terminal, "*");
-    uint32_t DOLLAR = grammar.symtab.add(SymbolKind::End, "$");
+    // Get symbol IDs from the grammar
+    uint32_t NUMBER = 0;  // First terminal
+    uint32_t PLUS   = 1;  // Second terminal
+    uint32_t TIMES  = 2;  // Third terminal
+    uint32_t DOLLAR = 3;  // End symbol
 
-    // Add non-terminals
-    uint32_t E = grammar.symtab.add(SymbolKind::NonTerminal, "E");
-    uint32_t T = grammar.symtab.add(SymbolKind::NonTerminal, "T");
-    uint32_t F = grammar.symtab.add(SymbolKind::NonTerminal, "F");
-    uint32_t S_prime = grammar.symtab.add(SymbolKind::NonTerminal, "S'");
-
-    // Add productions
-    // E -> E + T | T
-    grammar.add_production(E, {E, PLUS, T});  // prod 0
-    grammar.add_production(E, {T});           // prod 1
-    // T -> T * F | F
-    grammar.add_production(T, {T, TIMES, F}); // prod 2
-    grammar.add_production(T, {F});           // prod 3
-    // F -> number
-    grammar.add_production(F, {NUMBER});      // prod 4
-    // S' -> E
-    grammar.add_production(S_prime, {E});     // prod 5
-
-    grammar.start_symbol = S_prime;
-    grammar.build_indices();
+    // Find DOLLAR symbol ID dynamically
+    for (size_t i = 0; i < grammar.symtab.size(); ++i) {
+        if (grammar.symtab[i].kind == SymbolKind::End && grammar.symtab[i].name == "$") {
+            DOLLAR = i;
+            break;
+        }
+    }
 
     // Generate parser
     LALRParser parser = LALRParser::from_grammar(grammar, DOLLAR);
