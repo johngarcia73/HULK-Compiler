@@ -12,7 +12,6 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <set>
 #include <fstream>
 #include <sstream>
 #include <regex>
@@ -34,7 +33,7 @@ struct ParsedProduction {
 
 struct GrammarSpec {
     std::vector<std::string> terminals;        // Terminales (tokens)
-    std::set<std::string> nonterminals;        // No-terminales
+    std::vector<std::string> nonterminals;     // No-terminales (en orden de descubrimiento)
     std::string start_symbol;                  // Símbolo de inicio (%start)
     std::vector<ParsedProduction> productions; // Producciones de la gramática
     std::string user_code;                     // Código C++ del usuario (%{ ... %})
@@ -108,9 +107,27 @@ inline void parse_production_line(
             if (!sym.empty() && sym[0] != '#') {
                 rhs_symbols.push_back(sym);
                 
-                // Agregar a nonterminals si no es terminal (mayúscula)
-                if (sym[0] >= 'a' && sym[0] <= 'z') {
-                    spec.nonterminals.insert(sym);
+                // Agregar a nonterminals solo si NO está en terminales
+                bool is_terminal = false;
+                for (const auto& t : spec.terminals) {
+                    if (t == sym) {
+                        is_terminal = true;
+                        break;
+                    }
+                }
+                
+                if (!is_terminal) {
+                    // Agregar a nonterminals si no está ya
+                    bool found = false;
+                    for (const auto& nt : spec.nonterminals) {
+                        if (nt == sym) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        spec.nonterminals.push_back(sym);
+                    }
                 }
             }
         }
@@ -137,8 +154,8 @@ inline GrammarSpec parse_grammar_file(const std::string& filename) {
     bool in_productions = false;  // Dentro de la sección %% ... %%
     bool in_user_code = false;    // Dentro de %{ ... %}
     
-    std::regex token_regex(R"(%token\s+([A-Za-z0-9_ ]+))");
-    std::regex start_regex(R"(%start\s+([A-Za-z0-9_]+))");
+    std::regex token_regex(R"(%token\s+(.+)$)");
+    std::regex start_regex(R"(%start\s+([A-Za-z0-9_']+))");
     
     std::string current_lhs;  // Para continuar producciones con | en múltiples líneas
     
@@ -226,8 +243,17 @@ inline GrammarSpec parse_grammar_file(const std::string& filename) {
                 current_lhs.erase(0, current_lhs.find_first_not_of(" \t"));
                 current_lhs.erase(current_lhs.find_last_not_of(" \t") + 1);
                 
-                // Agregar a nonterminals
-                spec.nonterminals.insert(current_lhs);
+                // Agregar a nonterminals si no está ya
+                bool found = false;
+                for (const auto& nt : spec.nonterminals) {
+                    if (nt == current_lhs) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    spec.nonterminals.push_back(current_lhs);
+                }
                 
                 // Procesar el RHS en la misma línea (después del ':')
                 std::string rhs_part = line.substr(colon_pos + 1);
@@ -278,15 +304,16 @@ inline Grammar build_grammar_from_spec(const GrammarSpec& spec) {
         symbol_ids[terminal] = id;
     }
     
+    // Agregar símbolo EOF AHORA (después de terminales, antes de no-terminales)
+    // Así los no-terminales tendrán IDs consecutivos después de los terminales
+    SymbolId dollar_id = grammar.symtab.add(SymbolKind::End, "$");
+    symbol_ids["$"] = dollar_id;
+    
     // Agregar no-terminales
     for (const auto& nonterminal : spec.nonterminals) {
         SymbolId id = grammar.symtab.add(SymbolKind::NonTerminal, nonterminal);
         symbol_ids[nonterminal] = id;
     }
-    
-    // Agregar símbolo EOF
-    SymbolId dollar_id = grammar.symtab.add(SymbolKind::End, "$");
-    symbol_ids["$"] = dollar_id;
     
     // ========================================================================
     // PASO 2: Agregar todas las producciones con sus acciones
