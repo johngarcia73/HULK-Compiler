@@ -17,7 +17,7 @@ FirstResult compute_nullable_first(const Grammar& G) {
 
         for (const auto& p : G.get_productions()) {
 
-            // 1️⃣ Nullable
+            // Nullable
             bool all_nullable = true;
             for (auto sym : p.rhs) {
                 if (!result.nullable[sym]) {
@@ -31,18 +31,18 @@ FirstResult compute_nullable_first(const Grammar& G) {
                 changed = true;
             }
 
-            // 2️⃣ FIRST
+            // FIRST
             for (auto sym : p.rhs) {
 
                 if (G.symtab[sym].kind == SymbolKind::Terminal) {
-                    if (!result.FIRST[p.lhs].test(sym)) {
-                        result.FIRST[p.lhs].set(sym);
+                    if (!result.FIRST[p.lhs].contains(sym)) {
+                        result.FIRST[p.lhs].insert(sym);
                         changed = true;
                     }
                     break;
                 }
 
-                if (result.FIRST[p.lhs].union_with(result.FIRST[sym]))
+                if (result.FIRST[p.lhs].unite(result.FIRST[sym]))
                     changed = true;
 
                 if (!result.nullable[sym])

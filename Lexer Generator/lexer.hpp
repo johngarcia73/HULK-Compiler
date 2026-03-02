@@ -3,13 +3,9 @@
 #include <map>
 #include <string>
 #include<vector>
+#include "token.hpp"
 #include"tokens.hpp"
 #include"dfa.hpp"
-
-struct Token {
-    int token_id;
-    std::string lexeme;
-};
 
 class Lexer {
 private:
