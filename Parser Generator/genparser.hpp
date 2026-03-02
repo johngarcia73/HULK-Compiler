@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "grammar.hpp"
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -38,6 +39,14 @@ struct GrammarSpec {
     std::vector<ParsedProduction> productions; // Producciones de la gramática
     std::string user_code;                     // Código C++ del usuario (%{ ... %})
 };
+
+// ============================================================================
+// Forward declarations
+// ============================================================================
+
+GrammarSpec parse_grammar_file(const std::string& filename);
+Grammar build_grammar_from_spec(const GrammarSpec& spec);
+Grammar build_grammar_from_file(const std::string& filename);
 
 // ============================================================================
 // Función para parsear línea de producción con alternativas
@@ -247,10 +256,89 @@ inline GrammarSpec parse_grammar_file(const std::string& filename) {
         }
     }
     
-    // Si no se especificó start symbol, usar el primer no-terminal
-    if (spec.start_symbol.empty() && !spec.nonterminals.empty()) {
-        spec.start_symbol = *spec.nonterminals.begin();
+    return spec;
+}
+
+// ============================================================================
+// Función para construir Grammar a partir de GrammarSpec
+// ============================================================================
+
+inline Grammar build_grammar_from_spec(const GrammarSpec& spec) {
+    Grammar grammar;
+    
+    // ========================================================================
+    // PASO 1: Agregar todos los símbolos a la tabla de símbolos
+    // ========================================================================
+    
+    std::unordered_map<std::string, SymbolId> symbol_ids;
+    
+    // Agregar terminales
+    for (const auto& terminal : spec.terminals) {
+        SymbolId id = grammar.symtab.add(SymbolKind::Terminal, terminal);
+        symbol_ids[terminal] = id;
     }
     
-    return spec;
+    // Agregar no-terminales
+    for (const auto& nonterminal : spec.nonterminals) {
+        SymbolId id = grammar.symtab.add(SymbolKind::NonTerminal, nonterminal);
+        symbol_ids[nonterminal] = id;
+    }
+    
+    // Agregar símbolo EOF
+    SymbolId dollar_id = grammar.symtab.add(SymbolKind::End, "$");
+    symbol_ids["$"] = dollar_id;
+    
+    // ========================================================================
+    // PASO 2: Agregar todas las producciones con sus acciones
+    // ========================================================================
+    
+    for (const auto& parsed_prod : spec.productions) {
+        SymbolId lhs_id = symbol_ids[parsed_prod.lhs];
+        
+        // Convertir RHS strings a IDs
+        std::vector<SymbolId> rhs_ids;
+        for (const auto& sym : parsed_prod.rhs) {
+            auto it = symbol_ids.find(sym);
+            if (it != symbol_ids.end()) {
+                rhs_ids.push_back(it->second);
+            } else {
+                throw std::runtime_error("Symbol not found in symbol table: " + sym);
+            }
+        }
+        
+        // Agregar producción con su action_code
+        grammar.add_production(lhs_id, rhs_ids, parsed_prod.action_code);
+    }
+    
+    // ========================================================================
+    // PASO 3: Establecer símbolo de inicio
+    // ========================================================================
+    
+    if (spec.start_symbol.empty()) {
+        throw std::runtime_error("No start symbol defined in grammar");
+    }
+    
+    auto it = symbol_ids.find(spec.start_symbol);
+    if (it == symbol_ids.end()) {
+        throw std::runtime_error("Start symbol not found: " + spec.start_symbol);
+    }
+    
+    grammar.start_symbol = it->second;
+    
+    // ========================================================================
+    // PASO 4: Construir índices internos
+    // ========================================================================
+    
+    grammar.build_indices();
+    
+    return grammar;
+}
+
+// ============================================================================
+// Función conveniencia: Leer .y file y construir Grammar directamente
+// ============================================================================
+
+inline Grammar build_grammar_from_file(const std::string& filename) {
+    GrammarSpec spec = parse_grammar_file(filename);
+    return build_grammar_from_spec(spec);
 }
