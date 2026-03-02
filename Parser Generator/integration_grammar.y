@@ -10,16 +10,16 @@
 
 %%
 
-E : E + T
-  | T
+E : E + T { $$ = new BinaryOpNode('+', static_cast<ExprNode*>($1), static_cast<ExprNode*>($3)); }
+  | T { $$ = $1; }
   ;
 
-T : T * F
-  | F
+T : T * F { $$ = new BinaryOpNode('*', static_cast<ExprNode*>($1), static_cast<ExprNode*>($3)); }
+  | F { $$ = $1; }
   ;
 
-F : number
+F : number { $$ = $1; }
   ;
 
-S' : E
+S' : E { $$ = $1; }
    ;
