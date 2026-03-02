@@ -1,0 +1,1 @@
+g++ nfa.cpp  preprocessor.cpp dfa.cpp lexer.cpp test.cpp -o test

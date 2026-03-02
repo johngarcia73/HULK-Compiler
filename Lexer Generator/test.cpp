@@ -23,7 +23,7 @@ int main(int argc, char const *argv[])
     Lexer lexer(default_token_specs());
     std::vector<Token> tokens = lexer.tokenize("9+2");
     for(Token t: tokens){
-        std::cout<<"Token with lexeme: "<< t.lexeme<< " and ID: "<< t.token_id<<" ";
+        std::cout<<"Token with lexeme: "<< t.value<< " and ID: "<< t.symbol_id<<" ";
     }
     return 0;
 }

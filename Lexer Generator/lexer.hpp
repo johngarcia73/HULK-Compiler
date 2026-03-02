@@ -3,7 +3,7 @@
 #include <map>
 #include <string>
 #include<vector>
-#include "token.hpp"
+#include "../common/token.hpp"
 #include"tokens.hpp"
 #include"dfa.hpp"
 

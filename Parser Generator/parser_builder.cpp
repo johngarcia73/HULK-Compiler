@@ -1,14 +1,3 @@
-// ============================================================================
-// parser_builder.cpp
-//
-// LALR Parser Builder Implementation
-//
-// Implements:
-// - LALRBuilder::build_canonical_lr1
-// - LALRBuilder::merge_to_lalr
-// - LALRBuilder::build_tables
-// - LALRBuilder::build
-// ============================================================================
 #include<iostream>
 #include "lalr_builder.hpp"
 #include "first.hpp"
@@ -16,7 +5,6 @@
 #include <cassert>
 
 using namespace std;        
-// Forward declarations for functions in lalr_algorithms.cpp
 extern LR1State closure_lr1(
     const LR1State& start,
     const Grammar& grammar,
@@ -31,9 +19,6 @@ extern LALRAutomaton merge_to_lalr_impl(
     const CanonicalLR1& canonical,
     const Grammar& grammar);
 
-// ============================================================================
-// LALRBuilder implementation
-// ============================================================================
 
 CanonicalLR1 LALRBuilder::build_canonical_lr1(
     const Grammar& grammar,
@@ -50,10 +35,7 @@ LALRAutomaton LALRBuilder::merge_to_lalr(
     return merge_to_lalr_impl(canonical, grammar);
 }
 
-// ============================================================================
 // Parse Table Generation
-// ============================================================================
-
 ParseTables LALRBuilder::build_tables(
     const LALRAutomaton& automaton,
     const Grammar& grammar,
@@ -154,10 +136,7 @@ ParseTables LALRBuilder::build_tables(
     return tables;
 }
 
-// ============================================================================
 // Main Build Function
-// ============================================================================
-
 ParseTables LALRBuilder::build(
     const Grammar& grammar,
     uint32_t dollar_symbol,

@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include "grammar.hpp"
 #include "lalr_builder.hpp"
+#include "ast_node.hpp"
 #include "ast_builder.hpp"
 
 
@@ -92,10 +93,7 @@ private:
 
 };
 
-// ============================================================================
 // Exceptions
-// ============================================================================
-
 class ParserException : public std::runtime_error {
 public:
     explicit ParserException(const std::string& msg)
