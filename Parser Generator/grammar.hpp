@@ -8,6 +8,7 @@ struct Production {
     ProdId id;
     SymbolId lhs;
     std::vector<SymbolId> rhs;
+    std::string action_code;  // Código semántico de la acción (ej: "{ $$ = $1 + $3; }")
 };
 
 class Grammar {
@@ -16,9 +17,10 @@ public:
 
     SymbolId start_symbol;
 
-    ProdId add_production(SymbolId lhs, const std::vector<SymbolId>& rhs) {
+    ProdId add_production(SymbolId lhs, const std::vector<SymbolId>& rhs, 
+                          const std::string& action_code = "") {
         ProdId id = productions.size();
-        productions.push_back({id, lhs, rhs});
+        productions.push_back({id, lhs, rhs, action_code});
         return id;
     }
 
