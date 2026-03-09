@@ -23,7 +23,7 @@ type_declaration: TYPE IDENTIFIER
         INHERITS
         IDENTIFIER 
         L_PAREN
-        ( IDENTIFIER (COMMA IDENTIFIER)*)?
+        ( expr (COMMA expr)*)?
         R_PAREN
     L_CURL_BRACK
     (attribute_declaration|function_declaration)*;
