@@ -62,7 +62,7 @@ std::vector<Token> Lexer::tokenize(const std::string& input) {
         int token_id = dfa.accept_token.at(last_accept_state);
         std::string lexeme = input.substr(pos, last_accept_pos - pos);
 
-        tokens.push_back(Token{token_id, lexeme});
+        tokens.push_back(Token{static_cast<uint32_t>(token_id), lexeme});
 
         pos = last_accept_pos;
     }
