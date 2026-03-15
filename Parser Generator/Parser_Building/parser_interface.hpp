@@ -9,6 +9,7 @@
 #include "lalr_builder.hpp"
 #include "../AST_Builder/ast_node.hpp"
 #include "../AST_Builder/ast_builder.hpp"
+#include "../../common/token.hpp"
 
 
 

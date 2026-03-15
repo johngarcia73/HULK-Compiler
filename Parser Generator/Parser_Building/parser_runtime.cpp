@@ -2,6 +2,8 @@
 #include "lalr_builder.hpp"
 #include <sstream>
 #include <cassert>
+#include <algorithm>   // para std::reverse
+#include "../../common/token.hpp"
 
 // LALRParser Factory & Lifecycle
 LALRParser LALRParser::from_grammar(
@@ -71,6 +73,7 @@ std::string LALRParser::format_error(
     std::ostringstream os;
     
     switch (status) {
+        
         case ParseResult::Status::SyntaxError:
             os << "Syntax error at line " << line << ", column " << column
                << ": unexpected token '" << token_name << "'";
@@ -105,20 +108,21 @@ ParseResult LALRParser::run_parser(const std::vector<Token>& tokens)
     result.error_line = 0;
     result.error_column = 0;
     result.reduction_sequence.clear();
-    result.ast = nullptr; // default null
-    
+    result.ast = nullptr;
+
     // States stack
     std::vector<uint32_t> state_stack;
     state_stack.push_back(0);
     
-    std::vector<ASTNode*> value_stack;
+    // Semantic value stack: stores Value objects
+    std::vector<Value> value_stack;
     
     size_t token_idx = 0;
     
     while (true) {
         uint32_t current_state = state_stack.back();
         
-        // Compute current symbol and token
+        // Determine current symbol and token
         uint32_t current_symbol;
         Token current_token(0, "", 0, 0);
         if (token_idx < tokens.size()) {
@@ -131,12 +135,11 @@ ParseResult LALRParser::run_parser(const std::vector<Token>& tokens)
                                   tokens.empty() ? 0 : tokens.back().column);
         }
         
-        // Find action in ACTION table
+        // Look up action in ACTION table
         auto& action_map = _tables.ACTION[current_state];
         auto it = action_map.find(current_symbol);
         
         if (it == action_map.end()) {
-            
             result.status = ParseResult::Status::SyntaxError;
             if (token_idx < tokens.size()) {
                 result.error_line = tokens[token_idx].line;
@@ -158,30 +161,43 @@ ParseResult LALRParser::run_parser(const std::vector<Token>& tokens)
             // Shift: push next state and consume token
             uint32_t next_state = (uint32_t)action.value;
             state_stack.push_back(next_state);
-            token_idx++;
             
-            // If there is a builder, construct a leaf node from the token
+            // If we have a builder, push a Value containing the token text
             if (_builder) {
-                ASTNode* node = nullptr;
-                _builder->onShift(current_symbol, current_token, node);
-                value_stack.push_back(node);
+                value_stack.push_back(Value::from_text(current_token.value));
             }
+            
+            token_idx++;
         }
         else if (action.kind == ActionKind::Reduce) {
-            uint32_t prod_id = (uint32_t)action.value;
-            const Production& prod = _grammar->get_productions()[prod_id];
+
             
-            // Pick up RHS nodes for builder before popping states
-            std::vector<ASTNode*> rhs_nodes;
-            if (_builder) {
-                for (size_t i = 0; i < prod.rhs.size(); ++i) {
-                    rhs_nodes.push_back(value_stack.back());
-                    value_stack.pop_back();
-                }
-                std::reverse(rhs_nodes.begin(), rhs_nodes.end()); // ahora en orden RHS[0]..RHS[n-1]
+
+            uint32_t prod_id = (uint32_t)action.value;
+
+            
+            const Production& prod = _grammar->get_productions()[prod_id];
+            if (value_stack.size() < prod.rhs.size()) {
+                std::cerr << "Error: pila de valores insuficiente para reducir prod " << prod_id 
+                        << " (necesita " << prod.rhs.size() << ", tiene " << value_stack.size() << ")\n";
+                result.status = ParseResult::Status::InternalError;
+                return result;
             }
             
-            // States pop
+
+            // Collect RHS values from the stack (they are popped in reverse order)
+            std::vector<Value> rhs_values;
+            if (_builder) {
+                rhs_values.reserve(prod.rhs.size());
+                for (size_t i = 0; i < prod.rhs.size(); ++i) {
+                    rhs_values.push_back(value_stack.back());
+                    value_stack.pop_back();
+                }
+                // Reverse to get original RHS order (left to right)
+                std::reverse(rhs_values.begin(), rhs_values.end());
+            }
+            
+            // Pop states corresponding to RHS symbols
             for (size_t i = 0; i < prod.rhs.size(); ++i) {
                 if (state_stack.size() > 1) {
                     state_stack.pop_back();
@@ -201,19 +217,18 @@ ParseResult LALRParser::run_parser(const std::vector<Token>& tokens)
             }
             state_stack.push_back(goto_it->second);
             
-            // If builder, build new AST node
+            // Build AST node using the builder, if present
             if (_builder) {
-                ASTNode* new_node = nullptr;
-                _builder->onReduce(prod_id, rhs_nodes, new_node);
-                value_stack.push_back(new_node);
+                ASTNode* new_node = _builder->build(prod_id, rhs_values);
+                value_stack.push_back(Value::from_node(new_node));
             }
         }
         else if (action.kind == ActionKind::Accept) {
             result.status = ParseResult::Status::Success;
             
-            // If there is a builder, the root node should be on top of value_stack
+            // The root AST node is on top of the value stack
             if (_builder && !value_stack.empty()) {
-                result.ast.reset(value_stack.back());
+                result.ast.reset(value_stack.back().node);
                 value_stack.pop_back();
             }
             return result;

@@ -155,15 +155,12 @@ ParseTables LALRBuilder::build(
 
     LALRAutomaton lalr = merge_to_lalr_impl(canonical, grammar);
     
-    
     std::cout << "=== LALR state 0 ===\n";
     for (const auto& kv : lalr.states[0].core_la) {
         std::cout << "  Prod " << kv.first.prod << " dot " << kv.first.dot << " lookaheads:";
         for (uint32_t la : kv.second.indices()) std::cout << " " << la;
         std::cout << "\n";
     }
-    
-    
     
     ParseTables tables = build_tables(lalr, grammar, dollar_symbol, conflicts_out);
     

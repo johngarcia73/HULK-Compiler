@@ -8,306 +8,368 @@
 #include <sstream>
 #include <regex>
 #include <iostream>
+#include <cctype>
 
+// -----------------------------------------------------------------------------
+// Parsed production
+// -----------------------------------------------------------------------------
 
-// Intermediate representation of a production
 struct ParsedProduction {
-    std::string lhs;                      // Left-hand side (non-terminal)
-    std::vector<std::string> rhs;         // Right-hand side (symbols)
-    std::string action_code;              // Csemantic action code (Bison-style, e.g. "{ $$ = $1 + $3; }")
+    std::string lhs;
+    std::vector<std::string> rhs;
 };
-
 
 struct GrammarSpec {
-    std::vector<std::string> terminals;        
-    std::vector<std::string> nonterminals;     
-    std::string start_symbol;                  // (%start)
-    std::vector<ParsedProduction> productions; 
-    std::string user_code;                     // C++ code (%{ ... %})
+    std::vector<std::string> terminals;
+    std::vector<std::string> nonterminals;
+    std::string start_symbol;
+    std::vector<ParsedProduction> productions;
+    std::string user_code;
 };
-// ============================================================================
 
-GrammarSpec parse_grammar_file(const std::string& filename);
-Grammar build_grammar_from_spec(const GrammarSpec& spec);
-Grammar build_grammar_from_file(const std::string& filename);
+// -----------------------------------------------------------------------------
+// Utility
+// -----------------------------------------------------------------------------
 
-// Parsing production lines with alternations (|)
-inline void parse_production_line(
-    const std::string& line,
-    const std::string& lhs,
-    GrammarSpec& spec)
+inline void trim(std::string &s)
 {
-    // Line format: "rhs1 rhs2 ... { action } | rhs1 rhs2 ... { action }"
-    
-    std::string current_line = line;
+    size_t a = s.find_first_not_of(" \t\r\n");
+    size_t b = s.find_last_not_of(" \t\r\n");
+
+    if (a == std::string::npos)
+    {
+        s.clear();
+        return;
+    }
+
+    s = s.substr(a, b - a + 1);
+}
+
+// Remove C-style comments /* ... */
+inline std::string remove_c_comments(const std::string &line)
+{
+    std::string result;
+    bool in_comment = false;
+    for (size_t i = 0; i < line.size(); ++i) {
+        if (!in_comment && i + 1 < line.size() && line[i] == '/' && line[i+1] == '*') {
+            in_comment = true;
+            ++i; // skip '*'
+            continue;
+        }
+        if (in_comment && i + 1 < line.size() && line[i] == '*' && line[i+1] == '/') {
+            in_comment = false;
+            ++i; // skip '/'
+            continue;
+        }
+        if (!in_comment) {
+            result += line[i];
+        }
+    }
+    return result;
+}
+
+// -----------------------------------------------------------------------------
+// Split RHS alternatives ignoring {actions}
+// -----------------------------------------------------------------------------
+
+inline void parse_production_line(
+    const std::string &line,
+    const std::string &lhs,
+    GrammarSpec &spec)
+{
+    // Check if the line is empty after trimming (epsilon production)
+    std::string trimmed = line;
+    trim(trimmed);
+    if (trimmed.empty()) {
+        spec.productions.push_back({lhs, {}});
+        std::cerr << "Debug: added epsilon production for " << lhs << "\n";
+        return;
+    }
+
     size_t pos = 0;
-    
-    while (pos < current_line.length()) {
-        // Find alternate part (split by '|')
-        size_t pipe_pos = current_line.find('|', pos);
-        std::string alt_part;
-        
-        if (pipe_pos != std::string::npos) {
-            alt_part = current_line.substr(pos, pipe_pos - pos);
-            pos = pipe_pos + 1;
-        } else {
-            alt_part = current_line.substr(pos);
-            pos = current_line.length();
-        }
-        
-        // Trim whitespace
-        alt_part.erase(0, alt_part.find_first_not_of(" \t\n\r"));
-        alt_part.erase(alt_part.find_last_not_of(" \t\n\r") + 1);
-        
-        if (alt_part.empty()) continue;
-        
-        // Extract semantic action { ... }
-        std::string action_code;
-        size_t brace_open = alt_part.find('{');
-        std::string rhs_part = alt_part;
-        
-        if (brace_open != std::string::npos) {
-            size_t brace_close = alt_part.find('}');
-            if (brace_close != std::string::npos) {
-                action_code = alt_part.substr(brace_open, brace_close - brace_open + 1);
-                rhs_part = alt_part.substr(0, brace_open);
+    while (pos < line.size())
+    {
+        int brace_level = 0;
+        size_t split = std::string::npos;
+
+        for (size_t i = pos; i < line.size(); ++i)
+        {
+            if (line[i] == '{')
+                brace_level++;
+
+            else if (line[i] == '}')
+                brace_level--;
+
+            else if (line[i] == '|' && brace_level == 0)
+            {
+                split = i;
+                break;
             }
         }
-        
-        // Trim whitespace of RHS
-        rhs_part.erase(0, rhs_part.find_first_not_of(" \t"));
-        rhs_part.erase(rhs_part.find_last_not_of(" \t") + 1);
-        
-        // Parse RHS symbols
-        std::vector<std::string> rhs_symbols;
-        std::istringstream iss(rhs_part);
+
+        std::string alt;
+
+        if (split != std::string::npos)
+        {
+            alt = line.substr(pos, split - pos);
+            pos = split + 1;
+        }
+        else
+        {
+            alt = line.substr(pos);
+            pos = line.size();
+        }
+
+        // Remove C comments from the alternative
+        alt = remove_c_comments(alt);
+        trim(alt);
+
+        // Remove semantic action (inside {})
+        size_t brace = alt.find('{');
+        if (brace != std::string::npos)
+        {
+            alt = alt.substr(0, brace);
+        }
+        trim(alt);
+
+        // Epsilon production?
+        if (alt.empty())
+        {
+            spec.productions.push_back({lhs, {}});
+            std::cerr << "Debug: added epsilon production for " << lhs << "\n";
+            continue;
+        }
+
+        // Tokenize RHS
+        std::vector<std::string> rhs;
+        std::stringstream ss(alt);
         std::string sym;
-        
-        while (iss >> sym) {
-            // Ignore empty symbols and comments
-            if (!sym.empty() && sym[0] != '#') {
-                rhs_symbols.push_back(sym);
-                
-                bool is_terminal = false;
-                for (const auto& t : spec.terminals) {
-                    if (t == sym) {
-                        is_terminal = true;
-                        break;
-                    }
-                }
-                
-                if (!is_terminal) {
-                    // Add a nonterminal if not already present
-                    bool found = false;
-                    for (const auto& nt : spec.nonterminals) {
-                        if (nt == sym) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        spec.nonterminals.push_back(sym);
-                    }
-                }
+        while (ss >> sym)
+        {
+            rhs.push_back(sym);
+        }
+
+        spec.productions.push_back({lhs, rhs});
+
+        // Discover possible nonterminals
+        for (auto &s : rhs)
+        {
+            bool is_terminal = false;
+            for (auto &t : spec.terminals)
+                if (t == s)
+                    is_terminal = true;
+
+            if (!is_terminal)
+            {
+                bool found = false;
+                for (auto &nt : spec.nonterminals)
+                    if (nt == s)
+                        found = true;
+                if (!found)
+                    spec.nonterminals.push_back(s);
             }
         }
-        
-        // Add production to spec
-        spec.productions.push_back({lhs, rhs_symbols, action_code});
     }
 }
 
-// Parse .y file and build Grammar object
-inline GrammarSpec parse_grammar_file(const std::string& filename) {
+// -----------------------------------------------------------------------------
+// Parse .y file
+// -----------------------------------------------------------------------------
+
+inline GrammarSpec parse_grammar_file(const std::string &filename)
+{
     GrammarSpec spec;
+
     std::ifstream file(filename);
-    
-    if (!file) {
-        std::cerr << "Error: Could not open file " << filename << std::endl;
-        throw std::runtime_error("Cannot open file: " + filename);
-    }
-    
+    if (!file)
+        throw std::runtime_error("Cannot open grammar file");
+
     std::string line;
-    bool in_productions = false;  // Inside %% ... %% section
-    bool in_user_code = false;    // Inside %{ ... %}
-    
+    bool in_productions = false;
+    bool in_user_code = false;
+
     std::regex token_regex(R"(%token\s+(.+)$)");
     std::regex start_regex(R"(%start\s+([A-Za-z0-9_']+))");
-    
-    std::string current_lhs;  // To continue productions with | in multiple lines
-    
-    while (std::getline(file, line)) {
-        // Handling %{ ... %} sections
-        if (line.find("%{") != std::string::npos) {
+
+    std::string current_lhs;
+
+    while (std::getline(file, line))
+    {
+        // Remove C comments from the whole line first
+        line = remove_c_comments(line);
+        trim(line);
+
+        if (line.empty())
+            continue;
+
+        // User code block
+        if (line.find("%{") != std::string::npos)
+        {
             in_user_code = true;
-            size_t pos = line.find("%{");
-            if (pos + 2 < line.size()) {
-                spec.user_code += line.substr(pos + 2) + "\n";
-            }
             continue;
         }
-        
-        if (line.find("%}") != std::string::npos && in_user_code) {
+        if (line.find("%}") != std::string::npos)
+        {
             in_user_code = false;
-            size_t pos = line.find("%}");
-            if (pos > 0) {
-                spec.user_code += line.substr(0, pos) + "\n";
-            }
             continue;
         }
-        
-        if (in_user_code) {
+        if (in_user_code)
+        {
             spec.user_code += line + "\n";
             continue;
         }
-        
-        // Ignore empty lines and comments
-        if (line.empty() || line[0] == '#') {
-            continue;
-        }
-        
-        // %% section delimits declarations and productions section
-        if (line.find("%%") != std::string::npos) {
+
+        // Separator %%
+        if (line == "%%")
+        {
             in_productions = !in_productions;
             continue;
         }
-        
-        // DECLARATIONS SECTION (before the first %%)
-        if (!in_productions) {
+
+        // Declarations section
+        if (!in_productions)
+        {
             std::smatch m;
-            
-            // Process %token
-            if (std::regex_search(line, m, token_regex)) {
-                std::istringstream iss(m[1].str());
+            if (std::regex_search(line, m, token_regex))
+            {
+                std::stringstream ss(m[1].str());
                 std::string tok;
-                while (iss >> tok) {
-                    if (!tok.empty()) {
-                        spec.terminals.push_back(tok);
-                    }
-                }
+                while (ss >> tok)
+                    spec.terminals.push_back(tok);
             }
-            
-            // Process %start
-            if (std::regex_search(line, m, start_regex)) {
+            if (std::regex_search(line, m, start_regex))
+            {
                 spec.start_symbol = m[1].str();
             }
+            continue;
         }
-        
-        // PRODUCTIONS SECTION (after the first %% until the second %%)
-        else {
-            // Detect new production (contains ':')
-            if (line.find(':') != std::string::npos) {
-                // New LHS
-                size_t colon_pos = line.find(':');
-                current_lhs = line.substr(0, colon_pos);
-                
-                // Trim whitespace
-                current_lhs.erase(0, current_lhs.find_first_not_of(" \t"));
-                current_lhs.erase(current_lhs.find_last_not_of(" \t") + 1);
-                
-                // Add to nonterminals if not already present
-                bool found = false;
-                for (const auto& nt : spec.nonterminals) {
-                    if (nt == current_lhs) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    spec.nonterminals.push_back(current_lhs);
-                }
-                
-                // Process the RHS on the same line (after the ':')
-                std::string rhs_part = line.substr(colon_pos + 1);
-                parse_production_line(rhs_part, current_lhs, spec);
-            }
-            
-            // Continue with alternatives (line starts with '|')
-            else if (!current_lhs.empty() && line[0] == '|') {
-                std::string alt_part = line.substr(1);
-                parse_production_line(alt_part, current_lhs, spec);
-            }
-            
-            // Continue productions on multiple lines (without '|', but without ':')
-            // BUT ignore lines that are only ';' or empty
-            else if (!current_lhs.empty() && !line.empty() &&
-                     line.find(':') == std::string::npos) {
-                std::string trimmed = line;
-                trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
-                trimmed.erase(trimmed.find_last_not_of(" \t\n\r") + 1);
-                
-                // Dont process lines that are just ';' or empty
-                if (trimmed != ";") {
-                    parse_production_line(line, current_lhs, spec);
-                }
-            }
+
+        // Productions section
+        if (line.find(':') != std::string::npos)
+        {
+            size_t pos = line.find(':');
+            current_lhs = line.substr(0, pos);
+            trim(current_lhs);
+
+            // Ensure LHS is in nonterminals
+            bool found = false;
+            for (auto &nt : spec.nonterminals)
+                if (nt == current_lhs)
+                    found = true;
+            if (!found)
+                spec.nonterminals.push_back(current_lhs);
+
+            std::string rhs = line.substr(pos + 1);
+            parse_production_line(rhs, current_lhs, spec);
+        }
+        else if (!current_lhs.empty() && line[0] == '|')
+        {
+            parse_production_line(line.substr(1), current_lhs, spec);
+        }
+        else if (line == ";")
+        {
+            current_lhs.clear();
         }
     }
-    
+
     return spec;
 }
 
-// Build Grammar from GrammarSpec
-inline Grammar build_grammar_from_spec(const GrammarSpec& spec) {
+// -----------------------------------------------------------------------------
+// Build Grammar object
+// -----------------------------------------------------------------------------
+
+inline Grammar build_grammar_from_spec(const GrammarSpec &spec)
+{
     Grammar grammar;
-    
 
     std::unordered_map<std::string, SymbolId> symbol_ids;
-    
-    // Add terminals
-    for (const auto& terminal : spec.terminals) {
-        SymbolId id = grammar.symtab.add(SymbolKind::Terminal, terminal);
-        symbol_ids[terminal] = id;
+
+    // Terminals
+    for (auto &t : spec.terminals)
+    {
+        SymbolId id = grammar.symtab.add(SymbolKind::Terminal, t);
+        symbol_ids[t] = id;
     }
-    
-    // Add end-of-input symbol $
-    SymbolId dollar_id = grammar.symtab.add(SymbolKind::End, "$");
-    symbol_ids["$"] = dollar_id;
-    
-    // Add non-terminals
-    for (const auto& nonterminal : spec.nonterminals) {
-        SymbolId id = grammar.symtab.add(SymbolKind::NonTerminal, nonterminal);
-        symbol_ids[nonterminal] = id;
+
+    // EOF
+    SymbolId eof = grammar.symtab.add(SymbolKind::End, "$");
+    symbol_ids["$"] = eof;
+
+    // Nonterminals
+    for (auto &nt : spec.nonterminals)
+    {
+        SymbolId id = grammar.symtab.add(SymbolKind::NonTerminal, nt);
+        symbol_ids[nt] = id;
     }
-    
-    // Add eveery production with their action codes
-    for (const auto& parsed_prod : spec.productions) {
-        SymbolId lhs_id = symbol_ids[parsed_prod.lhs];
-        
-        // Convert RHS strings into IDs
-        std::vector<SymbolId> rhs_ids;
-        for (const auto& sym : parsed_prod.rhs) {
-            auto it = symbol_ids.find(sym);
-            if (it != symbol_ids.end()) {
-                rhs_ids.push_back(it->second);
-            } else {
-                throw std::runtime_error("Symbol not found in symbol table: " + sym);
-            }
+
+    // Determine start symbol
+    std::string start = spec.start_symbol;
+    if (start.empty() && !spec.productions.empty()) {
+        start = spec.productions[0].lhs;
+        std::cerr << "Warning: no %start directive, using first production LHS: " << start << "\n";
+    }
+    if (start.empty()) {
+        throw std::runtime_error("No start symbol and no productions");
+    }
+    if (!symbol_ids.count(start)) {
+        SymbolId id = grammar.symtab.add(SymbolKind::NonTerminal, start);
+        symbol_ids[start] = id;
+    }
+
+    // Add all productions
+    for (auto &p : spec.productions)
+    {
+        if (!symbol_ids.count(p.lhs))
+        {
+            SymbolId id = grammar.symtab.add(SymbolKind::NonTerminal, p.lhs);
+            symbol_ids[p.lhs] = id;
         }
-        
-        // Add production and action code to grammar
-        grammar.add_production(lhs_id, rhs_ids, parsed_prod.action_code);
+        SymbolId lhs = symbol_ids[p.lhs];
+        std::vector<SymbolId> rhs;
+        for (auto &sym : p.rhs)
+        {
+            if (!symbol_ids.count(sym))
+            {
+                std::cerr << "Warning: implicit symbol " << sym << "\n";
+                SymbolId id = grammar.symtab.add(SymbolKind::NonTerminal, sym);
+                symbol_ids[sym] = id;
+            }
+            rhs.push_back(symbol_ids[sym]);
+        }
+        grammar.add_production(lhs, rhs, "");
     }
-    
-    // Set start symbol
-    if (spec.start_symbol.empty()) {
-        throw std::runtime_error("No start symbol defined in grammar");
-    }
-    
-    auto it = symbol_ids.find(spec.start_symbol);
-    if (it == symbol_ids.end()) {
-        throw std::runtime_error("Start symbol not found: " + spec.start_symbol);
-    }
-    
-    grammar.start_symbol = it->second;
-    
+
+    // Start symbol
+    SymbolId start_id = symbol_ids[start];
+
+    // Augmented grammar S' → S
+    std::string aug = start + "'";
+    SymbolId aug_id = grammar.symtab.add(SymbolKind::NonTerminal, aug);
+    grammar.add_production(aug_id, {start_id}, "");
+    grammar.start_symbol = aug_id;
+
     grammar.build_indices();
-    
+
+    const auto& prods = grammar.get_productions();
+    for (size_t i = 0; i < prods.size(); ++i) {
+        std::cout << "Prod " << i << ": " << grammar.symtab[prods[i].lhs].name << " ->";
+        for (auto s : prods[i].rhs) std::cout << " " << grammar.symtab[s].name;
+        std::cout << "\n";
+    }
+
+    // Debug output
+    std::cerr << "Total productions after augmentation: " << grammar.get_productions().size() << "\n";
+
     return grammar;
 }
 
-// Builds a Grammar object directly from a .y file
-inline Grammar build_grammar_from_file(const std::string& filename) {
+// -----------------------------------------------------------------------------
+// Convenience wrapper
+// -----------------------------------------------------------------------------
+
+inline Grammar build_grammar_from_file(const std::string &filename)
+{
     GrammarSpec spec = parse_grammar_file(filename);
     return build_grammar_from_spec(spec);
 }

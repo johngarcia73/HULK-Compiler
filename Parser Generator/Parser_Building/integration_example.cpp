@@ -1,87 +1,157 @@
 // ============================================================================
-// integration_example.cpp
+// test_pipeline_ast.cpp
 //
-// Example showing integration between Lexer and Parser with AST construction
+// Test del pipeline completo:
+//
+// .y → Grammar → LALR → Parser → ASTBuilder → AST
 // ============================================================================
 
+#include "../../common/token.hpp"
 #include "../utils/Grammar/grammar.hpp"
 #include "lalr_builder.hpp"
 #include "parser_interface.hpp"
+#include "../AST_Builder/ast_node.hpp"
 #include "../AST_Builder/ast_builder.hpp"
 #include "genparser.hpp"
+
 #include <iostream>
 #include <memory>
 #include <vector>
 #include <string>
-#include <cassert>
+#include <unordered_map>
 
-int main() {
-    std::cout << "\n=== LALR(1) Parser - AST Integration Example ===\n\n";
+int main()
+{
+    try
+    {
+        std::cout << "\n=== Parser + AST pipeline test ===\n\n";
 
-    // Create grammar from .y file
-    Grammar grammar = build_grammar_from_file("integration_grammar.y");
+        // ------------------------------------------------------------
+        // 1. Load grammar
+        // ------------------------------------------------------------
 
-    // Get symbol IDs from the grammar
-    uint32_t NUMBER = 0;  // First terminal
-    uint32_t PLUS   = 1;  // Second terminal
-    uint32_t TIMES  = 2;  // Third terminal
-    uint32_t DOLLAR = 3;  // End symbol
+        Grammar grammar = build_grammar_from_file("grammar.y");
 
-    // Find DOLLAR symbol ID dynamically
-    for (size_t i = 0; i < grammar.symtab.size(); ++i) {
-        if (grammar.symtab[i].kind == SymbolKind::End && grammar.symtab[i].name == "$") {
-            DOLLAR = i;
-            break;
+       
+        std::cout << "Symbols:\n";
+        for (size_t i = 0; i < grammar.symtab.size(); ++i) {
+            std::cout << "  " << i << ": " << grammar.symtab[i].name 
+                    << " (" << (grammar.symtab[i].kind == SymbolKind::Terminal ? "T" : "NT") << ")\n";
         }
-    }
 
-    // Generate parser
-    LALRParser parser = LALRParser::from_grammar(grammar, DOLLAR);
-    std::cout << "✓ Parser generated: " << parser.state_count() << " states\n";
-    std::cout << "  Symbols in grammar: " << grammar.symtab.size() << "\n";
-    std::cout << "  Productions: " << grammar.get_productions().size() << "\n";
-    std::cout << "  NUMBER symbol ID: " << NUMBER << "\n\n";
+        std::cout << "Grammar loaded\n";
+        std::cout << "Symbols: " << grammar.symtab.size() << "\n";
+        std::cout << "Productions: " << grammar.get_productions().size() << "\n\n";
 
-    
 
-    auto builder = std::make_unique<ExprASTBuilder>();
-    parser.set_builder(std::move(builder));
+        // ------------------------------------------------------------
+        // 2. Build symbol lookup
+        // ------------------------------------------------------------
 
-    // Example: Parse "2 + 3 * 4"
-    std::vector<Token> tokens = {
-        Token(NUMBER, "2", 1, 1),
-        Token(PLUS,   "+", 1, 3),
-        Token(NUMBER, "3", 1, 5),
-        Token(TIMES,  "*", 1, 7),
-        Token(NUMBER, "4", 1, 9),
-    };
+        std::unordered_map<std::string, uint32_t> sym;
 
-    std::cout << "Parsing: 2 + 3 * 4\n";
-    ParseResult result = parser.parse(tokens);
-
-    if (result.is_success()) {
-        std::cout << "✓ Parse succeeded!\n";
-        std::cout << "  Reductions: ";
-        for (size_t i = 0; i < result.reduction_sequence.size(); ++i) {
-            if (i > 0) std::cout << " ";
-            std::cout << "P" << result.reduction_sequence[i];
+        for (size_t i = 0; i < grammar.symtab.size(); ++i)
+        {
+            sym[grammar.symtab[i].name] = i;
         }
+
+
+        uint32_t NUMBER     = sym.at("NUMBER");
+        uint32_t PLUS       = sym.at("PLUS");
+        uint32_t MINUS       = sym.at("MINUS");
+        uint32_t STAR       = sym.at("STAR");
+        uint32_t SEMICOLON  = sym.at("SEMICOLON");
+        uint32_t EOF_SYM    = sym.at("$");
+
+
+        // ------------------------------------------------------------
+        // 3. Build parser
+        // ------------------------------------------------------------
+
+        LALRParser parser =
+            LALRParser::from_grammar(grammar, EOF_SYM);
+
+        std::cout << "Parser generated\n";
+        std::cout << "States: " << parser.state_count() << "\n\n";
+
+
+        // ------------------------------------------------------------
+        // 4. Attach AST builder
+        // ------------------------------------------------------------
+
+        parser.set_builder(std::make_unique<ASTBuilder>());
+
+
+        // ------------------------------------------------------------
+        // 5. Token stream
+        // 2 + 3 * 4;
+        // ------------------------------------------------------------
+
+        std::vector<Token> tokens =
+        {
+            Token(NUMBER,"2",1,1),
+            Token(PLUS,"+",1,2),
+            Token(NUMBER,"3",1,3),
+            Token(STAR,"*",1,4),
+            Token(NUMBER,"4",1,5),
+            Token(MINUS,"-",1,6),
+            Token(NUMBER,"1",1,7),
+            Token(SEMICOLON,";",1,7),
+            Token(EOF_SYM,"$",1,8)
+        };
+
+
+        std::cout << "Parsing: 2 + 3 * 4 - 1;\n\n";
+
+        ParseResult result = parser.parse(tokens);
+
+
+        // ------------------------------------------------------------
+        // 6. Result
+        // ------------------------------------------------------------
+        if (result.ast) {
+            std::cout << "\nAST:\n";
+            result.ast->print(std::cout);
+        }
+        
+        if (!result.is_success())
+        {
+            std::cout << "✗ Parse failed\n";
+            std::cout << result.error_message << "\n";
+            return 1;
+        }
+
+        
+
+        std::cout << "✓ Parse succeeded\n";
+
+        std::cout << "Reductions:";
+        for (auto r : result.reduction_sequence)
+            std::cout << " P" << r;
         std::cout << "\n";
 
-        if (result.ast) {
-            std::cout << "  AST construido: ";
-            //printAST(result.ast.get());
-            std::cout << "\n";
 
-            ExprNode* root = dynamic_cast<ExprNode*>(result.ast.get());
-            
-        } else {
-            std::cout << "  No se construyó AST (builder no configurado o error)\n";
+        // ------------------------------------------------------------
+        // 7. AST validation
+        // ------------------------------------------------------------
+
+        if (result.ast)
+        {
+            std::cout << "✓ AST construido correctamente\n";
         }
-    } else {
-        std::cout << "✗ Parse failed: " << result.error_message << "\n";
-    }
+        else
+        {
+            std::cout << "✗ No se construyó AST\n";
+        }
 
-    std::cout << "\n";
-    return 0;
+        std::cout << "\n";
+
+        return 0;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "FATAL: " << e.what() << "\n";
+        return 2;
+    }
 }
+//x

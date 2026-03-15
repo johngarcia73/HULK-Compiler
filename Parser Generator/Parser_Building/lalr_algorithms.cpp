@@ -1,3 +1,4 @@
+// lalr_algorithms.cpp  (parche mínimo)
 #include "lalr_builder.hpp"
 #include "../utils/First_Comp/first.hpp"
 #include <algorithm>
@@ -5,14 +6,12 @@
 #include <sstream>
 #include <unordered_set>
 #include <cassert>
-
+#include <stdexcept>
 
 inline uint64_t pack_key(uint32_t state, uint32_t symbol) {
     return (uint64_t(state) << 32) | uint64_t(symbol);
 }
 
-
-// fingerprint for states of LR(1)
 inline std::string fingerprint_lr1(const LR1State& state) {
     std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> triples;
     triples.reserve(128);
@@ -34,11 +33,12 @@ inline std::string fingerprint_lr1(const LR1State& state) {
     return os.str();
 }
 
-// LR(1) Closure Function
+// --- closure_lr1: ahora recibe la tabla de producciones que debe usar
 LR1State closure_lr1(
     const LR1State& start,
     const Grammar& grammar,
-    const FirstResult& first)
+    const FirstResult& first,
+    const std::vector<Production>& productions)   // <- nuevo parámetro
 {
     LR1State closure = start;
     std::queue<ItemCore> work;
@@ -55,41 +55,48 @@ LR1State closure_lr1(
         assert(it_la != closure.core_la.end());
         SymbolSet lookaheads = it_la->second;
         
-        const Production& prod = grammar.get_productions()[core.prod];
+        if (core.prod >= productions.size()) {
+            throw std::runtime_error("closure_lr1: core.prod out of range");
+        }
+        const Production& prod = productions[core.prod];
         
         if (core.dot >= prod.rhs.size()) continue;
         
         uint32_t next_sym = prod.rhs[core.dot];
         if (grammar.symtab[next_sym].kind != SymbolKind::NonTerminal) continue;
         
+        // For each production of next_sym (these indices refer to original grammar productions)
         for (uint32_t prod_id : grammar.productions_of(next_sym)) {
-            const Production& new_prod = grammar.get_productions()[prod_id];
-            
+            // prod_id must be valid relative to productions (we copied grammar.get_productions() earlier)
+            if (prod_id >= productions.size()) {
+                throw std::runtime_error("closure_lr1: prod_id out of range relative to local productions");
+            }
+            // Compute FIRST(beta a) and add la where needed
             SymbolSet beta_first(first.FIRST.size());
+            
+            // Compute FIRST(beta) once (beta = symbols after the nonterminal in prod)
+            SymbolSet first_of_beta(first.FIRST.size());
+            bool beta_all_nullable = true;
+            for (size_t k = core.dot + 1; k < prod.rhs.size(); ++k) {
+                uint32_t sym = prod.rhs[k];
+                if (grammar.symtab[sym].kind == SymbolKind::Terminal || grammar.symtab[sym].kind == SymbolKind::End) {
+                    first_of_beta.insert(sym);
+                    beta_all_nullable = false;
+                    break;
+                }
+                first_of_beta.unite(first.FIRST[sym]);
+                if (!first.nullable[sym]) {
+                    beta_all_nullable = false;
+                    break;
+                }
+            }
+            
+            // For each lookahead a, compute FIRST(beta a)
             for (uint32_t la : lookaheads.indices()) {
-                bool all_nullable = true;
-                
-                for (size_t k = core.dot + 1; k < prod.rhs.size(); ++k) {
-                    uint32_t sym = prod.rhs[k];
-                    
-                    if (grammar.symtab[sym].kind == SymbolKind::Terminal || 
-                        grammar.symtab[sym].kind == SymbolKind::End) {
-                        beta_first.insert(sym);
-                        all_nullable = false;
-                        break;
-                    }
-                    
-                    beta_first.unite(first.FIRST[sym]);
-                    
-                    if (!first.nullable[sym]) {
-                        all_nullable = false;
-                        break;
-                    }
-                }
-                
-                if (all_nullable) {
-                    beta_first.insert(la);
-                }
+                SymbolSet addset = first_of_beta;
+                if (beta_all_nullable) addset.insert(la);
+                // unite into beta_first (we can accumulate across la)
+                beta_first.unite(addset);
             }
             
             ItemCore new_core{prod_id, 0};
@@ -105,13 +112,13 @@ LR1State closure_lr1(
     return closure;
 }
 
-// LR(1) GOTO Function
-
+// --- goto_lr1: ahora recibe la tabla de producciones que debe usar
 LR1State goto_lr1(
     const LR1State& state,
     uint32_t symbol,
     const Grammar& grammar,
-    const FirstResult& first)
+    const FirstResult& first,
+    const std::vector<Production>& productions)   // <- nuevo parámetro
 {
     LR1State next_state;
     next_state.core_la.reserve(32);
@@ -119,7 +126,11 @@ LR1State goto_lr1(
     for (auto& kv : state.core_la) {
         const ItemCore& core = kv.first;
         const SymbolSet& lookaheads = kv.second;
-        const Production& prod = grammar.get_productions()[core.prod];
+        
+        if (core.prod >= productions.size()) {
+            throw std::runtime_error("goto_lr1: core.prod out of range");
+        }
+        const Production& prod = productions[core.prod];
         
         if (core.dot < prod.rhs.size() && prod.rhs[core.dot] == symbol) {
             ItemCore advanced{core.prod, core.dot + 1};
@@ -128,10 +139,10 @@ LR1State goto_lr1(
         }
     }
     
-    return closure_lr1(next_state, grammar, first);
+    return closure_lr1(next_state, grammar, first, productions);
 }
 
-// Canonical LR(1) Construction
+// --- build_canonical_lr1_impl: crea local_prods, añade aumentada, y pasa local_prods
 CanonicalLR1 build_canonical_lr1_impl(
     const Grammar& grammar,
     const FirstResult& first,
@@ -139,13 +150,16 @@ CanonicalLR1 build_canonical_lr1_impl(
 {
     CanonicalLR1 result;
     
-    const std::vector<Production>& productions = grammar.get_productions();
-    uint32_t start_prod = (uint32_t)(productions.size() - 1);
+    
+    const auto& productions = grammar.get_productions();
+    
+    uint32_t start_prod = static_cast<uint32_t>(productions.size() - 1); // index of augmented prod
     
     LR1State initial;
     ItemCore core0{start_prod, 0};
     initial.core_la[core0].insert(dollar_symbol);
-    initial = closure_lr1(initial, grammar, first);
+    
+    initial = closure_lr1(initial, grammar, first, productions);
     
     std::unordered_map<std::string, uint32_t> fingerprint_to_id;
     std::queue<LR1State> work_queue;
@@ -164,6 +178,9 @@ CanonicalLR1 build_canonical_lr1_impl(
         
         for (auto& kv : current.core_la) {
             const ItemCore& core = kv.first;
+            if (core.prod >= productions.size()) {
+                throw std::runtime_error("build_canonical_lr1_impl: core.prod out of range during symbol collection");
+            }
             const Production& prod = productions[core.prod];
             
             if (core.dot < prod.rhs.size()) {
@@ -172,7 +189,7 @@ CanonicalLR1 build_canonical_lr1_impl(
         }
         
         for (uint32_t sym : symbols_after_dot) {
-            LR1State next = goto_lr1(current, sym, grammar, first);
+            LR1State next = goto_lr1(current, sym, grammar, first, productions);
             
             if (next.core_la.empty()) continue;
             
@@ -181,7 +198,7 @@ CanonicalLR1 build_canonical_lr1_impl(
             
             uint32_t next_id;
             if (it == fingerprint_to_id.end()) {
-                next_id = (uint32_t)result.states.size();
+                next_id = static_cast<uint32_t>(result.states.size());
                 next.id = next_id;
                 result.states.push_back(next);
                 fingerprint_to_id[fp] = next_id;
@@ -197,8 +214,7 @@ CanonicalLR1 build_canonical_lr1_impl(
     return result;
 }
 
-// LALR Merging
-
+// --- merge_to_lalr_impl unchanged (keeps original behaviour) ---
 LALRAutomaton merge_to_lalr_impl(
     const CanonicalLR1& canonical,
     const Grammar& grammar)
@@ -220,7 +236,7 @@ LALRAutomaton merge_to_lalr_impl(
         core_groups[os.str()].push_back(s);
     }
     
-    // Find the group key taht contains the 0 state
+    // Find the group key that contains the 0 state
     std::string initial_key;
     for (const auto& grp : core_groups) {
         if (std::find(grp.second.begin(), grp.second.end(), 0) != grp.second.end()) {
@@ -229,7 +245,6 @@ LALRAutomaton merge_to_lalr_impl(
         }
     }
     
-    // 3. Build LALR states, starting by initial group
     LALRAutomaton result;
     result.states.reserve(core_groups.size());
     
@@ -239,9 +254,8 @@ LALRAutomaton merge_to_lalr_impl(
     if (!initial_key.empty()) {
         auto it = core_groups.find(initial_key);
         if (it != core_groups.end()) {
-            // Create merged state
             LR1State merged;
-            merged.id = (uint32_t)result.states.size();
+            merged.id = static_cast<uint32_t>(result.states.size());
             
             for (uint32_t old_id : it->second) {
                 for (const auto& kv : canonical.states[old_id].core_la) {
@@ -251,20 +265,20 @@ LALRAutomaton merge_to_lalr_impl(
             }
             
             result.states.push_back(std::move(merged));
-            uint32_t new_id = result.states.size() - 1;
+            uint32_t new_id = static_cast<uint32_t>(result.states.size() - 1);
             
             for (uint32_t old_id : it->second) {
                 old_to_new[old_id] = new_id;
             }
             
-            core_groups.erase(it); // Erase in order to dont process it anymore
+            core_groups.erase(it);
         }
     }
     
-    // Then process the remaining groups
+    // Process remaining groups
     for (auto& grp : core_groups) {
         LR1State merged;
-        merged.id = (uint32_t)result.states.size();
+        merged.id = static_cast<uint32_t>(result.states.size());
         
         for (uint32_t old_id : grp.second) {
             for (const auto& kv : canonical.states[old_id].core_la) {
@@ -274,7 +288,7 @@ LALRAutomaton merge_to_lalr_impl(
         }
         
         result.states.push_back(std::move(merged));
-        uint32_t new_id = result.states.size() - 1;
+        uint32_t new_id = static_cast<uint32_t>(result.states.size() - 1);
         
         for (uint32_t old_id : grp.second) {
             old_to_new[old_id] = new_id;
@@ -284,8 +298,8 @@ LALRAutomaton merge_to_lalr_impl(
     // Reassign transitions
     for (const auto& kv : canonical.trans) {
         uint64_t key = kv.first;
-        uint32_t old_from = (uint32_t)(key >> 32);
-        uint32_t sym = (uint32_t)(key & 0xffffffff);
+        uint32_t old_from = static_cast<uint32_t>(key >> 32);
+        uint32_t sym = static_cast<uint32_t>(key & 0xffffffff);
         uint32_t old_to = kv.second;
         
         uint32_t new_from = old_to_new[old_from];
