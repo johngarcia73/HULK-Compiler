@@ -1,0 +1,136 @@
+#include "../../common/token.hpp"
+#include "../utils/Grammar/grammar.hpp"
+#include "lalr_builder.hpp"
+#include "parser_interface.hpp"
+#include "../AST_Builder/ast_node.hpp"
+#include "../AST_Builder/ast_builder.hpp"
+#include "genparser.hpp"
+#include "../../Lexer_Generator/lexer.hpp"  
+
+
+#include <iostream>
+#include <memory>
+#include <vector>
+#include <string>
+#include <unordered_map>
+
+int main()
+{
+    try
+    {
+        std::cout << "\n=== FULL PIPELINE TEST (Lexer + Parser + AST) ===\n\n";
+
+        // ------------------------------------------------------------
+        // 1. Load grammar from file (grammar_small.y)
+        // ------------------------------------------------------------
+        Grammar grammar = build_grammar_from_file("Parser_Generator/grammar.y");
+
+        std::cout << "Grammar loaded\n";
+        std::cout << "Symbols: " << grammar.symtab.size() << "\n";
+        std::cout << "Productions: " << grammar.get_productions().size() << "\n\n";
+
+        // ------------------------------------------------------------
+        // 2. Build mapping from token name to symbol id
+        // ------------------------------------------------------------
+        std::unordered_map<std::string, uint32_t> name_to_id;
+        for (size_t i = 0; i < grammar.symtab.size(); ++i) {
+            name_to_id[grammar.symtab[i].name] = i;
+        }
+
+        // ------------------------------------------------------------
+        // 3. Build parser from grammar
+        // ------------------------------------------------------------
+        uint32_t eof_id = name_to_id["$"];
+        LALRParser parser = LALRParser::from_grammar(grammar, eof_id);
+        std::cout << "Parser generated\n";
+        std::cout << "States: " << parser.state_count() << "\n\n";
+
+        // ------------------------------------------------------------
+        // 4. Attach AST builder
+        // ------------------------------------------------------------
+        parser.set_builder(std::make_unique<ASTBuilder>());
+
+        // ------------------------------------------------------------
+        // 5. Lexer setup (using default token specifications)
+        // ------------------------------------------------------------
+        auto token_specs = default_token_specs();
+        Lexer lexer(token_specs);
+
+        // Input program (must match grammar_small.y)
+        std::string input = R"(let a = 5 in add(a,3);)";
+        //input.erase(std::remove_if(input.begin(), input.end(), ::isspace), input.end());
+
+        std::cout << "Input program:\n" << input << "\n";
+
+        // ------------------------------------------------------------
+        // 6. Tokenize input with lexer
+        // ------------------------------------------------------------
+        std::vector<Token> raw_tokens = lexer.tokenize(input);
+
+        // ------------------------------------------------------------
+        // 7. Map raw tokens to grammar symbol IDs
+        // ------------------------------------------------------------
+        std::vector<Token> tokens;
+        for (auto& t : raw_tokens) {
+            // t.symbol_id is the TokenType enum value; convert to name
+            std::string token_name = token_type_to_string(static_cast<TokenType>(t.symbol_id));
+            auto it = name_to_id.find(token_name);
+            if (it == name_to_id.end()) {
+                std::cerr << "Error: token name '" << token_name
+                          << "' not found in grammar symbols\n";
+                return 1;
+            }
+            uint32_t id = it->second;
+            tokens.emplace_back(id, t.value, t.line, t.column);
+        }
+
+        // Add EOF token manually (since lexer may not generate it)
+        tokens.emplace_back(name_to_id["$"], "$", 0, 0);
+
+        // ------------------------------------------------------------
+        // 8. Parse tokens
+        // ------------------------------------------------------------
+        std::cout << "Parsing...\n";
+
+        std::cout << "Tokens from lexer:\n";
+        for (auto& t : tokens) {
+            std::cout << "  " << t.value << " -> sym=" << t.symbol_id << "\n";
+        }
+        ParseResult result = parser.parse(tokens);
+
+        // ------------------------------------------------------------
+        // 9. Show result
+        // ------------------------------------------------------------
+        if (!result.is_success()) {
+            std::cout << "✗ Parse failed\n";
+            std::cout << result.error_message << "\n";
+            return 1;
+        }
+
+        std::cout << "✓ Parse succeeded\n";
+
+        std::cout << "Reductions:";
+        for (auto r : result.reduction_sequence)
+            std::cout << " P" << r;
+        std::cout << "\n";
+
+        // ------------------------------------------------------------
+        // 10. Print AST
+        // ------------------------------------------------------------
+        if (result.ast) {
+            std::cout << "✓ AST construido correctamente\n";
+            std::cout << "\nAST:\n";
+            result.ast->print(std::cout);
+        } else {
+            std::cout << "✗ No se construyó AST\n";
+        }
+
+        std::cout << "\n";
+
+        return 0;
+    }
+    catch (const std::exception &e) {
+        std::cerr << "FATAL: " << e.what() << "\n";
+        return 2;
+    }
+}//

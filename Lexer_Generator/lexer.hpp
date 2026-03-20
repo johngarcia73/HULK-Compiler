@@ -11,7 +11,7 @@ class Lexer {
 private:
     DFA dfa;
     bool built = false;
-
+    std::vector<bool> skip_table;
 public:
     Lexer(const std::vector<TokenSpec>& specs);
 

@@ -5,6 +5,7 @@
 #include<vector>
 #include"tokens.hpp"
 
+std::vector<bool> build_skip_table_from_specs(const std::vector<TokenSpec>& specs);
 bool isOperator(char c);
 std::string purgeIgnorable(const std::string& regex);
 std::string insertExplicitConcat(const std::string& regex);

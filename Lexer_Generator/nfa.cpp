@@ -229,9 +229,9 @@ NFA build_lexer_nfa(
         auto postfix = to_postfix(with_concat);
 
         // debug printing
-         std::cout << "Postfix tokens for " << s.regex_infix << " : ";
-         for (auto &t : postfix) std::cout << t.value << " ";
-         std::cout << std::endl;
+        // std::cout << "Postfix tokens for " << s.regex_infix << " : ";
+        // for (auto &t : postfix) std::cout << t.value << " ";
+        // std::cout << std::endl;
 
         postfixes.push_back(std::move(postfix));
         token_ids.push_back(token_to_id(s.type));

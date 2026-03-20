@@ -4,6 +4,8 @@
 #include <string>
 #include"dfa.hpp"
 #include"lexer.hpp"
+#include"preprocessor.hpp"
+#include <stdexcept>
 
 Lexer::Lexer(const std::vector<TokenSpec>& specs) {
 
@@ -13,7 +15,7 @@ Lexer::Lexer(const std::vector<TokenSpec>& specs) {
     NFA nfa = build_lexer_nfa(specs, state_counter);
 
     dfa = nfa_to_dfa(nfa);
-
+    skip_table = build_skip_table_from_specs(specs);
     built = true;
 }
 
@@ -60,6 +62,11 @@ std::vector<Token> Lexer::tokenize(const std::string& input) {
         }
 
         int token_id = dfa.accept_token.at(last_accept_state);
+        if (skip_table[token_id]) {
+            pos = last_accept_pos;
+            continue;
+        }
+
         std::string lexeme = input.substr(pos, last_accept_pos - pos);
 
         tokens.push_back(Token{static_cast<uint32_t>(token_id), lexeme});

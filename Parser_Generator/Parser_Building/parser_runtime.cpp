@@ -140,6 +140,21 @@ ParseResult LALRParser::run_parser(const std::vector<Token>& tokens)
         auto it = action_map.find(current_symbol);
         
         if (it == action_map.end()) {
+
+                    // Depuración: imprime estado y esperados
+            std::cerr << "Syntax error: state=" << current_state
+                    << ", token='" << current_token.value << "' (sym=" << current_symbol << ")\n";
+            std::cerr << "Expected terminals in this state: ";
+            for (auto& p : action_map) {
+                std::cerr << _grammar->symtab[p.first].name << " ";
+            }
+            std::cerr << "\n";
+            std::cerr << "State stack: ";
+            for (auto s : state_stack) std::cerr << s << " ";
+            std::cerr << "\n";
+            ////////////////////////////////////////////
+            
+
             result.status = ParseResult::Status::SyntaxError;
             if (token_idx < tokens.size()) {
                 result.error_line = tokens[token_idx].line;

@@ -191,7 +191,7 @@ inline void specs_to_postfix_and_ids(
     }
 }
 
-inline std::vector<bool> build_skip_table_from_specs(const std::vector<TokenSpec>& specs) {
+std::vector<bool> build_skip_table_from_specs(const std::vector<TokenSpec>& specs) {
     // max token id:
     int max_id = -1;
     for (auto &s: specs) max_id = std::max(max_id, token_to_id(s.type));
