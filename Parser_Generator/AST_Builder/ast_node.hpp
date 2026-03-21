@@ -1,12 +1,15 @@
 #pragma once
 #include <string>
 #include <vector>
-#include <memory>
 #include <iostream>
+#include "../../Semantic_Check/type.hpp"
+#include "visitor.hpp"
+
 
 struct ASTNode {
     virtual ~ASTNode() = default;
     virtual void print(std::ostream &o, int indent = 0) const = 0;
+    virtual Type* accept(Visitor& v) = 0;   // método para el patrón Visitor
 };
 
 using ASTNodePtr = ASTNode*;
@@ -15,7 +18,10 @@ inline void indent(std::ostream &o, int n) {
     for (int i = 0; i < n; ++i) o.put(' ');
 }
 
+// ============================================================================
 // Nodos básicos
+// ============================================================================
+
 struct NumberNode : ASTNode {
     long long value;
     NumberNode(long long v) : value(v) {}
@@ -23,22 +29,24 @@ struct NumberNode : ASTNode {
         indent(o, indent_n);
         o << "Number(" << value << ")\n";
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
 struct VariableNode : ASTNode {
     std::string name;
-    VariableNode(std::string n): name(std::move(n)) {}
+    VariableNode(std::string n) : name(std::move(n)) {}
     void print(std::ostream &o, int indent_n = 0) const override {
         indent(o, indent_n);
         o << "Variable(" << name << ")\n";
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
 struct BinaryOpNode : ASTNode {
     char op;
     ASTNodePtr left;
     ASTNodePtr right;
-    BinaryOpNode(char op_, ASTNodePtr l, ASTNodePtr r): op(op_), left(l), right(r) {}
+    BinaryOpNode(char op_, ASTNodePtr l, ASTNodePtr r) : op(op_), left(l), right(r) {}
     ~BinaryOpNode() { delete left; delete right; }
     void print(std::ostream &o, int indent_n = 0) const override {
         indent(o, indent_n);
@@ -46,45 +54,52 @@ struct BinaryOpNode : ASTNode {
         if (left) left->print(o, indent_n + 2);
         if (right) right->print(o, indent_n + 2);
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
 struct UnaryOpNode : ASTNode {
     char op;
     ASTNodePtr operand;
-    UnaryOpNode(char op_, ASTNodePtr operand_): op(op_), operand(operand_) {}
+    UnaryOpNode(char op_, ASTNodePtr operand_) : op(op_), operand(operand_) {}
     ~UnaryOpNode() { delete operand; }
     void print(std::ostream &o, int indent_n = 0) const override {
         indent(o, indent_n);
         o << "UnaryOp(" << op << ")\n";
         if (operand) operand->print(o, indent_n + 2);
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
 struct ExprStmtNode : ASTNode {
     ASTNodePtr expr;
-    ExprStmtNode(ASTNodePtr e): expr(e) {}
+    ExprStmtNode(ASTNodePtr e) : expr(e) {}
     ~ExprStmtNode() { delete expr; }
     void print(std::ostream &o, int indent_n = 0) const override {
         indent(o, indent_n);
         o << "ExprStmt\n";
         if (expr) expr->print(o, indent_n + 2);
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
 struct BlockNode : ASTNode {
     std::vector<ASTNodePtr> stmts;
-    BlockNode(std::vector<ASTNodePtr> s): stmts(std::move(s)) {}
+    BlockNode(std::vector<ASTNodePtr> s) : stmts(std::move(s)) {}
     ~BlockNode() { for (auto p : stmts) delete p; }
     void print(std::ostream &o, int indent_n = 0) const override {
         indent(o, indent_n);
         o << "Block\n";
         for (auto s : stmts) s->print(o, indent_n + 2);
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
 struct ProgramNode : ASTNode {
     std::vector<ASTNodePtr> decls;
     std::vector<ASTNodePtr> stmts;
+    void test() { std::cerr << "ProgramNode::test called\n"; }  //Testing purpose
+
+
     ProgramNode(std::vector<ASTNodePtr> d, std::vector<ASTNodePtr> s)
         : decls(std::move(d)), stmts(std::move(s)) {}
     ~ProgramNode() { for (auto p : decls) delete p; for (auto p : stmts) delete p; }
@@ -102,9 +117,14 @@ struct ProgramNode : ASTNode {
             for (auto s : stmts) s->print(o, indent_n + 4);
         }
     }
+    Type* accept(Visitor& v) override { std::cerr << "ProgramNode::accept called\n";
+    return v.visit(*this); }
 };
 
-// Nodos específicos de la gramática reducida
+// ============================================================================
+// Nodos de la gramática reducida
+// ============================================================================
+
 struct ParamListNode : ASTNode {
     std::vector<std::string> params;
     ParamListNode(std::vector<std::string> p) : params(std::move(p)) {}
@@ -117,6 +137,7 @@ struct ParamListNode : ASTNode {
         }
         o << ")\n";
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
 struct FunctionDeclNode : ASTNode {
@@ -135,6 +156,7 @@ struct FunctionDeclNode : ASTNode {
         o << "\n";
         if (body) body->print(o, indent_n + 2);
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
 struct LetNode : ASTNode {
@@ -150,6 +172,7 @@ struct LetNode : ASTNode {
         if (init) init->print(o, indent_n + 2);
         if (body) body->print(o, indent_n + 2);
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
 struct IfNode : ASTNode {
@@ -169,6 +192,7 @@ struct IfNode : ASTNode {
         indent(o, indent_n + 2); o << "Else:\n";
         if (else_branch) else_branch->print(o, indent_n + 4);
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
 struct FunctionCallNode : ASTNode {
@@ -182,4 +206,35 @@ struct FunctionCallNode : ASTNode {
         o << "FunctionCall(" << name << ")\n";
         for (auto* a : args) a->print(o, indent_n + 2);
     }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
+};
+
+// ============================================================================
+// Nodos auxiliares (para el let con múltiples bindings, si se usan)
+// ============================================================================
+
+struct LetBindingNode : ASTNode {
+    std::string name;
+    ASTNodePtr init;
+    LetBindingNode(std::string n, ASTNodePtr i) : name(std::move(n)), init(i) {}
+    ~LetBindingNode() { delete init; }
+    void print(std::ostream& o, int indent_n = 0) const override {
+        indent(o, indent_n);
+        o << "LetBinding(" << name << ")\n";
+        if (init) init->print(o, indent_n + 2);
+    }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
+};
+
+struct LetBindingsNode : ASTNode {
+    std::vector<LetBindingNode*> bindings;
+    LetBindingsNode() = default;
+    LetBindingsNode(std::vector<LetBindingNode*> b) : bindings(std::move(b)) {}
+    ~LetBindingsNode() { for (auto* b : bindings) delete b; }
+    void print(std::ostream& o, int indent_n = 0) const override {
+        indent(o, indent_n);
+        o << "LetBindings\n";
+        for (auto* b : bindings) b->print(o, indent_n + 2);
+    }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
 };

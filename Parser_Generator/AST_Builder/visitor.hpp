@@ -1,66 +1,38 @@
 #pragma once
+#include "../../Semantic_Check/type.hpp"
 
-// Forward declarations de todos los nodos concretos del AST
+// Forward declarations de los nodos que realmente usas
 class ProgramNode;
-class DeclarationListNode;
-class StatementListNode;
-class ParameterListNode;
-class ParameterNode;
-class ArgumentListNode;
-class ElifListNode;
-class LetBindingListNode;
-class LetBindingNode;
-class FunctionDeclNode;
-class TypeDeclNode;
-class ProtocolDeclNode;
-class AttributeDeclNode;
 class BlockNode;
-class ExprStmtNode;
-class BinaryOpNode;
-class UnaryOpNode;
-class AssignmentNode;
+class FunctionDeclNode;
+class LetNode;
+class IfNode;
+class FunctionCallNode;
 class VariableNode;
 class NumberNode;
-class StringNode;
-class BoolNode;
-class FunctionCallNode;
-class VariableDeclNode;
-class IfNode;
-class WhileNode;
-class ForNode;
-class InitializationNode;
+class BinaryOpNode;
+class ExprStmtNode;
+class ParamListNode;
+class LetBindingNode;
+class LetBindingsNode;
+class UnaryOpNode;
 
 class Visitor {
 public:
     virtual ~Visitor() = default;
 
-    // Visita para cada tipo concreto de nodo
-    virtual void visit(ProgramNode& node) = 0;
-    virtual void visit(DeclarationListNode& node) = 0;
-    virtual void visit(StatementListNode& node) = 0;
-    virtual void visit(ParameterListNode& node) = 0;
-    virtual void visit(ParameterNode& node) = 0;
-    virtual void visit(ArgumentListNode& node) = 0;
-    virtual void visit(ElifListNode& node) = 0;
-    virtual void visit(LetBindingListNode& node) = 0;
-    virtual void visit(LetBindingNode& node) = 0;
-    virtual void visit(FunctionDeclNode& node) = 0;
-    virtual void visit(TypeDeclNode& node) = 0;
-    virtual void visit(ProtocolDeclNode& node) = 0;
-    virtual void visit(AttributeDeclNode& node) = 0;
-    virtual void visit(BlockNode& node) = 0;
-    virtual void visit(ExprStmtNode& node) = 0;
-    virtual void visit(BinaryOpNode& node) = 0;
-    virtual void visit(UnaryOpNode& node) = 0;
-    virtual void visit(AssignmentNode& node) = 0;
-    virtual void visit(VariableNode& node) = 0;
-    virtual void visit(NumberNode& node) = 0;
-    virtual void visit(StringNode& node) = 0;
-    virtual void visit(BoolNode& node) = 0;
-    virtual void visit(FunctionCallNode& node) = 0;
-    virtual void visit(VariableDeclNode& node) = 0;
-    virtual void visit(IfNode& node) = 0;
-    virtual void visit(WhileNode& node) = 0;
-    virtual void visit(ForNode& node) = 0;
-    virtual void visit(InitializationNode& node) = 0;
+    virtual Type* visit(ProgramNode& node) = 0;
+    virtual Type* visit(BlockNode& node) = 0;
+    virtual Type* visit(FunctionDeclNode& node) = 0;
+    virtual Type* visit(LetNode& node) = 0;
+    virtual Type* visit(IfNode& node) = 0;
+    virtual Type* visit(FunctionCallNode& node) = 0;
+    virtual Type* visit(VariableNode& node) = 0;
+    virtual Type* visit(NumberNode& node) = 0;
+    virtual Type* visit(BinaryOpNode& node) = 0;
+    virtual Type* visit(ExprStmtNode& node) = 0;
+    virtual Type* visit(ParamListNode& node) = 0;
+    virtual Type* visit(LetBindingNode& node) = 0;
+    virtual Type* visit(LetBindingsNode& node) = 0;
+    virtual Type* visit(UnaryOpNode& node) = 0;
 };

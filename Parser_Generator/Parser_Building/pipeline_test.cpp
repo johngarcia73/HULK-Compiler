@@ -6,6 +6,7 @@
 #include "../AST_Builder/ast_builder.hpp"
 #include "genparser.hpp"
 #include "../../Lexer_Generator/lexer.hpp"  
+#include "../../Semantic_Check/analyzer.hpp"   
 
 
 #include <iostream>
@@ -57,7 +58,7 @@ int main()
         Lexer lexer(token_specs);
 
         // Input program (must match grammar_small.y)
-        std::string input = R"(let a = 5 in add(a,3);)";
+        std::string input = R"(function add(x, y) { x + y; } let a = 5 in add(a,3);)";
         //input.erase(std::remove_if(input.begin(), input.end(), ::isspace), input.end());
 
         std::cout << "Input program:\n" << input << "\n";
@@ -97,7 +98,34 @@ int main()
             std::cout << "  " << t.value << " -> sym=" << t.symbol_id << "\n";
         }
         ParseResult result = parser.parse(tokens);
+        
+        
+        if (result.ast) {
+            ProgramNode* program = dynamic_cast<ProgramNode*>(result.ast.get());
+            if (!program) {
+                std::cerr << "Error: el nodo raíz no es un ProgramNode\n";
+                return 1;
+            }
+            std::cerr << "ProgramNode address: " << program << "\n";
 
+            program->test();
+            SemanticAnalyzer analyzer;
+            analyzer.analyze(program);
+
+            if (analyzer.hasErrors()) {
+                // Los errores ya se imprimen dentro de analyze, pero puedes mostrarlos de nuevo si quieres
+                std::cout << "✗ Semantic analysis failed.\n";
+                return 1;
+            } else {
+                std::cout << "✓ Semantic analysis successful.\n";
+                // Opcional: imprimir la tabla de símbolos (para depuración)
+                analyzer.getSymbolTable().dump(); // si implementaste dump()
+            }
+        } else {
+            std::cout << "✗ No AST to analyze.\n";
+            return 1;
+        }
+        
         // ------------------------------------------------------------
         // 9. Show result
         // ------------------------------------------------------------
@@ -127,6 +155,7 @@ int main()
 
         std::cout << "\n";
 
+        
         return 0;
     }
     catch (const std::exception &e) {

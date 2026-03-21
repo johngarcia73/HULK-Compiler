@@ -13,7 +13,7 @@ enum class TokenType : int {
     TOKEN_IF,
     TOKEN_ELSE,
     // Operadores y literales
-    TOKEN_INT,
+    TOKEN_NUMBER,
     TOKEN_PLUS,
     TOKEN_MINUS,
     TOKEN_STAR,
@@ -51,7 +51,7 @@ struct RegexToken {
 // Convert TokenType to string (for mapping to grammar symbols)
 inline std::string token_type_to_string(TokenType t) {
     switch (t) {
-        case TokenType::TOKEN_INT:          return "NUMBER";
+        case TokenType::TOKEN_NUMBER:          return "NUMBER";
         case TokenType::TOKEN_PLUS:         return "PLUS";
         case TokenType::TOKEN_MINUS:        return "MINUS";
         case TokenType::TOKEN_STAR:         return "STAR";
@@ -94,7 +94,7 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_ELSE,     "else",     false },
 
         // Números
-        { TokenType::TOKEN_INT,      "(0|1|2|3|4|5|6|7|8|9)+", false },
+        { TokenType::TOKEN_NUMBER,      "(0|1|2|3|4|5|6|7|8|9)+", false },
         // Operadores
         { TokenType::TOKEN_PLUS,     "\\+", false },
         { TokenType::TOKEN_MINUS,    "-",   false },

@@ -13,6 +13,7 @@ SRCS = \
     Lexer_Generator/lexer.cpp \
     Lexer_Generator/nfa.cpp \
     Lexer_Generator/preprocessor.cpp \
+    Semantic_Check/analyzer.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 TARGET = test
