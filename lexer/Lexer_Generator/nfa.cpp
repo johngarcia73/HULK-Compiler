@@ -5,7 +5,7 @@
 #include <stack>
 #include <algorithm>
 #include <cctype>
-#include "tokens.hpp"
+#include "../tokens.hpp"
 #include"preprocessor.hpp"
 #include "nfa.hpp"
 

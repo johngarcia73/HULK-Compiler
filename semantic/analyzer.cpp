@@ -101,7 +101,7 @@ Type* SemanticAnalyzer::visit(IfNode& node) {
 }
 
 Type* SemanticAnalyzer::visit(FunctionCallNode& node) {
-    SymbolInfo* sym = symTable.lookup(node.name);
+    const SymbolInfo* sym = symTable.lookup(node.name);
     if (!sym) {
         error("Función '" + node.name + "' no declarada.");
         return nullptr;
@@ -133,7 +133,7 @@ Type* SemanticAnalyzer::visit(FunctionCallNode& node) {
 }
 
 Type* SemanticAnalyzer::visit(VariableNode& node) {
-    SymbolInfo* sym = symTable.lookup(node.name);
+    const SymbolInfo* sym = symTable.lookup(node.name);
     if (!sym) {
         error("Variable '" + node.name + "' no declarada.");
         return nullptr;

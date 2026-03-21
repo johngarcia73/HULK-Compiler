@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
-#include "../../Semantic_Check/type.hpp"
+#include "../../semantic/type.hpp"
 #include "visitor.hpp"
 
 

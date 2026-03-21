@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Semantic_Check/type.hpp"
+#include "../../semantic/type.hpp"
 
-// Forward declarations de los nodos que realmente usas
+// Forward declarations
 class ProgramNode;
 class BlockNode;
 class FunctionDeclNode;

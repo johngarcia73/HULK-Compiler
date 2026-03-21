@@ -62,12 +62,12 @@ public:
 
     // For debgging
     void dump() const {
-        std::cout << "Symbol table (level " << currentLevel << "):\n";
+        std::cout << "Symbol table (scopes: " << scopes.size() << ")\n";
         for (size_t i = 0; i < scopes.size(); ++i) {
             std::cout << "  Scope " << i << ":\n";
             for (const auto& [name, info] : scopes[i]) {
                 std::cout << "    " << name << " : " << info.type->toString()
-                          << " (kind=" << static_cast<int>(info.kind) << ")\n";
+                        << " (kind=" << static_cast<int>(info.kind) << ")\n";
             }
         }
     }

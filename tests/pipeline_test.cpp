@@ -1,19 +1,25 @@
-#include "../../common/token.hpp"
-#include "../utils/Grammar/grammar.hpp"
-#include "lalr_builder.hpp"
-#include "parser_interface.hpp"
-#include "../AST_Builder/ast_node.hpp"
-#include "../AST_Builder/ast_builder.hpp"
-#include "genparser.hpp"
-#include "../../Lexer_Generator/lexer.hpp"  
-#include "../../Semantic_Check/analyzer.hpp"   
+#include "../common/token.hpp"
+#include "../parser/utils/Grammar/grammar.hpp"
+#include "../parser/Parser_Generator/lalr_builder.hpp"
+#include "../parser/Parser_Generator/parser_interface.hpp"
+#include "../parser/AST_Builder/ast_node.hpp"
+#include "../parser/AST_Builder/ast_builder.hpp"
+#include "../parser/Parser_Generator/genparser.hpp"
+#include "../lexer/lexer.hpp"  
+#include "../semantic/analyzer.hpp"   
 
-
+#include <string>
 #include <iostream>
 #include <memory>
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <fstream>
+#include <sstream>
+
+std::string grammar_dir = "../parser/Parser_Generator/grammar.y";
+std::string program_dir = "program.hulk";
+
 
 int main()
 {
@@ -24,7 +30,7 @@ int main()
         // ------------------------------------------------------------
         // 1. Load grammar from file (grammar_small.y)
         // ------------------------------------------------------------
-        Grammar grammar = build_grammar_from_file("Parser_Generator/grammar.y");
+        Grammar grammar = build_grammar_from_file(grammar_dir);
 
         std::cout << "Grammar loaded\n";
         std::cout << "Symbols: " << grammar.symtab.size() << "\n";
@@ -57,9 +63,17 @@ int main()
         auto token_specs = default_token_specs();
         Lexer lexer(token_specs);
 
-        // Input program (must match grammar_small.y)
-        std::string input = R"(function add(x, y) { x + y; } let a = 5 in add(a,3);)";
-        //input.erase(std::remove_if(input.begin(), input.end(), ::isspace), input.end());
+        // Input program (must match grammar.y)
+        std::string input;
+        std::ifstream file(program_dir);
+        if (!file.is_open()) {
+            std::cerr << "Error: Couldnt open test program\n";
+            return 1;
+        }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        input = buffer.str();
+        file.close();
 
         std::cout << "Input program:\n" << input << "\n";
 
@@ -103,7 +117,7 @@ int main()
         if (result.ast) {
             ProgramNode* program = dynamic_cast<ProgramNode*>(result.ast.get());
             if (!program) {
-                std::cerr << "Error: el nodo raíz no es un ProgramNode\n";
+                std::cerr << "Error: Root node is not a ProgramNode\n";
                 return 1;
             }
             std::cerr << "ProgramNode address: " << program << "\n";
@@ -111,16 +125,18 @@ int main()
             program->test();
             SemanticAnalyzer analyzer;
             analyzer.analyze(program);
-
+            
             if (analyzer.hasErrors()) {
-                // Los errores ya se imprimen dentro de analyze, pero puedes mostrarlos de nuevo si quieres
+                
                 std::cout << "✗ Semantic analysis failed.\n";
                 return 1;
             } else {
                 std::cout << "✓ Semantic analysis successful.\n";
-                // Opcional: imprimir la tabla de símbolos (para depuración)
-                analyzer.getSymbolTable().dump(); // si implementaste dump()
+                
+                analyzer.getSymbolTable().dump();
             }
+
+            
         } else {
             std::cout << "✗ No AST to analyze.\n";
             return 1;
@@ -146,11 +162,11 @@ int main()
         // 10. Print AST
         // ------------------------------------------------------------
         if (result.ast) {
-            std::cout << "✓ AST construido correctamente\n";
+            std::cout << "✓ AST succesfully built\n";
             std::cout << "\nAST:\n";
             result.ast->print(std::cout);
         } else {
-            std::cout << "✗ No se construyó AST\n";
+            std::cout << "✗ AST was not built\n";
         }
 
         std::cout << "\n";

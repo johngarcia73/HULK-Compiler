@@ -112,7 +112,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
 
         // 9: statements : /* empty */
         case 9:
-            return new BlockNode({});   // No verificar índice
+            return new BlockNode({});   
 
         // 10: statements : statements statement
         case 10: {
@@ -297,7 +297,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             return new BlockNode(std::move(items));
         }
 
-        // 34: program' : program (producción aumentada, no debería llegar)
+        // 34: program' : program (augmented production)
         case 34:
             std::cerr << "ASTBuilder: producción aumentada 34 no debería ser invocada\n";
             return nullptr;

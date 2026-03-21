@@ -5,7 +5,7 @@
 #include<vector>
 #include "../common/token.hpp"
 #include"tokens.hpp"
-#include"dfa.hpp"
+#include"./Lexer_Generator/dfa.hpp"
 
 class Lexer {
 private:

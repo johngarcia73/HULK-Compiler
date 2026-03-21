@@ -6,13 +6,11 @@
 #include <stdexcept>
 
 enum class TokenType : int {
-    // Palabras clave (IDs bajos para que tengan prioridad)
     TOKEN_FUNCTION = 0,
     TOKEN_LET,
     TOKEN_IN,
     TOKEN_IF,
     TOKEN_ELSE,
-    // Operadores y literales
     TOKEN_NUMBER,
     TOKEN_PLUS,
     TOKEN_MINUS,
@@ -26,12 +24,11 @@ enum class TokenType : int {
     TOKEN_COMMA,
     TOKEN_EQUAL,
     TOKEN_IDENTIFIER,
-    TOKEN_WHITESPACE,   // Se saltará
+    TOKEN_WHITESPACE,
     TOKEN_EOF,
     TOKEN_UNKNOWN
 };
 
-// Regex token types (if still needed)
 enum class RegexTokenType {
     Literal,        // alphabet symbol
     Union,          // |
@@ -86,16 +83,16 @@ struct TokenSpec {
 // Default token specifications (used by lexer generator)
 inline std::vector<TokenSpec> default_token_specs() {
     return {
-        // Palabras clave (deben ir antes que IDENTIFIER)
+        // Keywords
         { TokenType::TOKEN_FUNCTION, "function", false },
         { TokenType::TOKEN_LET,      "let",      false },
         { TokenType::TOKEN_IN,       "in",       false },
         { TokenType::TOKEN_IF,       "if",       false },
         { TokenType::TOKEN_ELSE,     "else",     false },
 
-        // Números
+        // Numbers
         { TokenType::TOKEN_NUMBER,      "(0|1|2|3|4|5|6|7|8|9)+", false },
-        // Operadores
+        // Operators
         { TokenType::TOKEN_PLUS,     "\\+", false },
         { TokenType::TOKEN_MINUS,    "-",   false },
         { TokenType::TOKEN_STAR,     "\\*", false },
@@ -107,16 +104,16 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_SEMICOLON, ";", false },
         { TokenType::TOKEN_COMMA,    ",", false },
         { TokenType::TOKEN_EQUAL,    "=",  false },
-        // Identificadores
+        // Identifiers
         { TokenType::TOKEN_IDENTIFIER,
           "(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|_)(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)*",
           false },
-        // Espacios en blanco (se saltan)
+        // Whitespaces (skipped)
         { TokenType::TOKEN_WHITESPACE, "(\\ )+", true }
     };
 }
 
-// Helper to get integer from TokenType (for backward compatibility)
+// Helper to get integer from TokenType
 inline int token_to_id(TokenType t) { return static_cast<int>(t); }
 
 #endif

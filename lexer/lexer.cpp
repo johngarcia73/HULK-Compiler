@@ -2,9 +2,9 @@
 #include <set>
 #include <map>
 #include <string>
-#include"dfa.hpp"
+#include"./Lexer_Generator/dfa.hpp"
 #include"lexer.hpp"
-#include"preprocessor.hpp"
+#include"./Lexer_Generator/preprocessor.hpp"
 #include <stdexcept>
 
 Lexer::Lexer(const std::vector<TokenSpec>& specs) {

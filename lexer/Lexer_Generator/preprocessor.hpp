@@ -3,7 +3,7 @@
 
 #include <string>
 #include<vector>
-#include"tokens.hpp"
+#include"../tokens.hpp"
 
 std::vector<bool> build_skip_table_from_specs(const std::vector<TokenSpec>& specs);
 bool isOperator(char c);

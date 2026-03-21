@@ -1,18 +1,18 @@
 #pragma once
-#include "../Parser_Generator/AST_Builder/ast_node.hpp"
+#include "../parser/AST_Builder/ast_node.hpp"
 #include "symbol_table.hpp"
 #include "type.hpp"
 #include <vector>
 #include <string>
-#include "../Parser_Generator/AST_Builder/visitor.hpp"
+#include "../parser/AST_Builder/visitor.hpp"
 
 
 class SemanticAnalyzer : public Visitor {
     SemanticSymbolTable symTable;
     std::vector<std::string> errors;
-    Type* currentFunctionReturnType = nullptr; // para verificar retornos
+    Type* currentFunctionReturnType = nullptr; // For return verifying
 
-    // Métodos auxiliares
+    // Aux methods
     void error(const std::string& msg) { errors.push_back(msg); }
     void reportErrors() const;
 
