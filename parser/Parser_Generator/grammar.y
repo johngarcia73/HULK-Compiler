@@ -7,9 +7,13 @@
 %token IF ELSE
 %token PLUS MINUS STAR SLASH
 %token NUMBER
+%token NUMBER_TYPE
+%token BOOL_TYPE
+%token STRING_TYPE
 %token IDENTIFIER
 %token EQUAL
 %token EOF 0
+%token COLON
 
 %start program
 
@@ -26,12 +30,21 @@ declarations : /* empty */
 declaration : function_decl
 
 function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN block
+              | FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type block
 
 param_list_opt : /* empty */
                | param_list
 
-param_list : IDENTIFIER
-           | param_list COMMA IDENTIFIER
+param_list : IDENTIFIER COLON type
+           | param_list COMMA IDENTIFIER COLON type
+
+
+
+
+type : NUMBER_TYPE
+     | BOOL_TYPE
+     | STRING_TYPE
+
 
 statements : /* empty */
            | statements statement

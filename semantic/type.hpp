@@ -10,18 +10,18 @@ public:
     virtual bool equals(const Type* other) const = 0;
 };
 
-class IntType : public Type {
+class NumberType : public Type {
 public:
-    static IntType* instance() {
-        static IntType inst;
+    static NumberType* instance() {
+        static NumberType inst;
         return &inst;
     }
-    std::string toString() const override { return "int"; }
+    std::string toString() const override { return "Number"; }
     bool equals(const Type* other) const override {
-        return dynamic_cast<const IntType*>(other) != nullptr;
+        return dynamic_cast<const NumberType*>(other) != nullptr;
     }
 private:
-    IntType() = default;
+    NumberType() = default;
 };
 
 class BoolType : public Type {
@@ -65,4 +65,18 @@ public:
     }
     const std::vector<Type*>& getParamTypes() const { return paramTypes; }
     Type* getReturnType() const { return returnType; }
+};
+
+class StringType : public Type {
+public:
+    static StringType* instance() {
+        static StringType inst;
+        return &inst;
+    }
+    std::string toString() const override { return "String"; }
+    bool equals(const Type* other) const override {
+        return dynamic_cast<const StringType*>(other) != nullptr;
+    }
+private:
+    StringType() = default;
 };

@@ -47,9 +47,7 @@ Type* SemanticAnalyzer::visit(FunctionDeclNode& node) {
         error("Función '" + node.name + "' ya declarada en este ámbito.");
         return nullptr;
     }
-    std::vector<Type*> paramTypes(node.params.size(), IntType::instance());
-    Type* retType = IntType::instance();
-    FunctionType* funcType = new FunctionType(paramTypes, retType);
+    FunctionType* funcType = new FunctionType(node.paramTypes, node.returnType);
     SymbolInfo info{node.name, funcType, SemanticSymbolKind::Function, symTable.getCurrentLevel()};
     if (!symTable.insert(node.name, info)) {
         error("Función '" + node.name + "' no se pudo insertar.");
@@ -57,15 +55,15 @@ Type* SemanticAnalyzer::visit(FunctionDeclNode& node) {
         return nullptr;
     }
     symTable.enterScope();
-    for (const auto& p : node.params) {
-        SymbolInfo paramInfo{p, IntType::instance(), SemanticSymbolKind::Parameter, symTable.getCurrentLevel()};
-        if (!symTable.insert(p, paramInfo)) {
-            error("Parámetro duplicado: " + p);
+    for (size_t i = 0; i < node.params.size(); ++i) {
+        SymbolInfo paramInfo{node.params[i], node.paramTypes[i], SemanticSymbolKind::Parameter, symTable.getCurrentLevel()};
+        if (!symTable.insert(node.params[i], paramInfo)) {
+            error("Parámetro duplicado: " + node.params[i]);
         }
     }
     Type* oldReturn = currentFunctionReturnType;
-    currentFunctionReturnType = retType;
-    node.body->accept(*this);  
+    currentFunctionReturnType = node.returnType;
+    node.body->accept(*this);
     currentFunctionReturnType = oldReturn;
     symTable.exitScope();
     return nullptr;
@@ -146,16 +144,25 @@ Type* SemanticAnalyzer::visit(VariableNode& node) {
 }
 
 Type* SemanticAnalyzer::visit(NumberNode& node) {
-    return IntType::instance();
+    return NumberType::instance();
 }
+
+Type* SemanticAnalyzer::visit(StringNode& node) {
+    return StringType::instance();
+}
+
+Type* SemanticAnalyzer::visit(BoolNode& node) {
+    return BoolType::instance();
+}
+
 
 Type* SemanticAnalyzer::visit(BinaryOpNode& node) {
     Type* left = node.left->accept(*this);  
     Type* right = node.right->accept(*this);
-    if (!left->equals(IntType::instance()) || !right->equals(IntType::instance())) {
+    if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
         error("Operadores aritméticos requieren operandos enteros.");
     }
-    return IntType::instance();
+    return NumberType::instance();
 }
 
 Type* SemanticAnalyzer::visit(ExprStmtNode& node) {
@@ -168,5 +175,7 @@ Type* SemanticAnalyzer::visit(LetBindingNode& node) { return nullptr; }
 Type* SemanticAnalyzer::visit(LetBindingsNode& node) { return nullptr; }
 Type* SemanticAnalyzer::visit(UnaryOpNode& node) {
     node.operand->accept(*this);
-    return IntType::instance();
+    return NumberType::instance();
 }
+
+Type* SemanticAnalyzer::visit(TypeNode& node) { return node.type; }

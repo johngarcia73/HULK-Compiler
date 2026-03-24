@@ -7,10 +7,14 @@
 
 enum class TokenType : int {
     TOKEN_FUNCTION = 0,
+    TOKEN_NUMBER_TYPE, 
+    TOKEN_BOOL_TYPE,  
+    TOKEN_STRING_TYPE,
     TOKEN_LET,
     TOKEN_IN,
     TOKEN_IF,
     TOKEN_ELSE,
+    
     TOKEN_NUMBER,
     TOKEN_PLUS,
     TOKEN_MINUS,
@@ -25,6 +29,7 @@ enum class TokenType : int {
     TOKEN_EQUAL,
     TOKEN_IDENTIFIER,
     TOKEN_WHITESPACE,
+    TOKEN_COLON,
     TOKEN_EOF,
     TOKEN_UNKNOWN
 };
@@ -48,7 +53,10 @@ struct RegexToken {
 // Convert TokenType to string (for mapping to grammar symbols)
 inline std::string token_type_to_string(TokenType t) {
     switch (t) {
-        case TokenType::TOKEN_NUMBER:          return "NUMBER";
+        case TokenType::TOKEN_NUMBER_TYPE:  return "NUMBER_TYPE";
+        case TokenType::TOKEN_BOOL_TYPE:    return "BOOL_TYPE";
+        case TokenType::TOKEN_STRING_TYPE:  return "STRING_TYPE";
+        case TokenType::TOKEN_NUMBER:       return "NUMBER";
         case TokenType::TOKEN_PLUS:         return "PLUS";
         case TokenType::TOKEN_MINUS:        return "MINUS";
         case TokenType::TOKEN_STAR:         return "STAR";
@@ -56,6 +64,7 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_LPAREN:       return "L_PAREN";
         case TokenType::TOKEN_RPAREN:       return "R_PAREN";
         case TokenType::TOKEN_FUNCTION:     return "FUNCTION";
+        
         case TokenType::TOKEN_IDENTIFIER:   return "IDENTIFIER";
         case TokenType::TOKEN_L_CURL_BRACK: return "L_CURL_BRACK";
         case TokenType::TOKEN_R_CURL_BRACK: return "R_CURL_BRACK";
@@ -66,6 +75,7 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_IF:           return "IF";
         case TokenType::TOKEN_ELSE:         return "ELSE";
         case TokenType::TOKEN_EQUAL:        return "EQUAL";
+        case TokenType::TOKEN_COLON:        return "COLON";
         case TokenType::TOKEN_EOF:          return "$";
         default:                            return "UNKNOWN";
     }
@@ -85,11 +95,14 @@ inline std::vector<TokenSpec> default_token_specs() {
     return {
         // Keywords
         { TokenType::TOKEN_FUNCTION, "function", false },
+        { TokenType::TOKEN_NUMBER_TYPE, "Number", false },
+        { TokenType::TOKEN_BOOL_TYPE,   "Bool",   false },
+        { TokenType::TOKEN_STRING_TYPE, "String", false },
         { TokenType::TOKEN_LET,      "let",      false },
         { TokenType::TOKEN_IN,       "in",       false },
         { TokenType::TOKEN_IF,       "if",       false },
         { TokenType::TOKEN_ELSE,     "else",     false },
-
+        
         // Numbers
         { TokenType::TOKEN_NUMBER,      "(0|1|2|3|4|5|6|7|8|9)+", false },
         // Operators
@@ -104,6 +117,7 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_SEMICOLON, ";", false },
         { TokenType::TOKEN_COMMA,    ",", false },
         { TokenType::TOKEN_EQUAL,    "=",  false },
+        { TokenType::TOKEN_COLON, ":", false },
         // Identifiers
         { TokenType::TOKEN_IDENTIFIER,
           "(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|_)(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)*",

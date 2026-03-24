@@ -32,6 +32,26 @@ struct NumberNode : ASTNode {
     Type* accept(Visitor& v) override { return v.visit(*this); }
 };
 
+struct BoolNode : ASTNode {
+    bool value;
+    BoolNode(bool v) : value(v) {}
+    void print(std::ostream& o, int indent_n = 0) const override {
+        indent(o, indent_n);
+        o << "Bool(" << (value ? "true" : "false") << ")\n";
+    }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
+};
+
+struct StringNode : ASTNode {
+    std::string value;
+    StringNode(const std::string& v) : value(v) {}
+    void print(std::ostream& o, int indent_n = 0) const override {
+        indent(o, indent_n);
+        o << "String(\"" << value << "\")\n";
+    }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
+};
+
 struct VariableNode : ASTNode {
     std::string name;
     VariableNode(std::string n) : name(std::move(n)) {}
@@ -127,13 +147,15 @@ struct ProgramNode : ASTNode {
 
 struct ParamListNode : ASTNode {
     std::vector<std::string> params;
-    ParamListNode(std::vector<std::string> p) : params(std::move(p)) {}
+    std::vector<Type*> paramTypes;
+    ParamListNode(std::vector<std::string> p, std::vector<Type*> pt)
+        : params(std::move(p)), paramTypes(std::move(pt)) {}
     void print(std::ostream& o, int indent_n = 0) const override {
         indent(o, indent_n);
         o << "ParamList(";
         for (size_t i = 0; i < params.size(); ++i) {
             if (i > 0) o << ", ";
-            o << params[i];
+            o << params[i] << " : " << paramTypes[i]->toString();
         }
         o << ")\n";
     }
@@ -143,10 +165,13 @@ struct ParamListNode : ASTNode {
 struct FunctionDeclNode : ASTNode {
     std::string name;
     std::vector<std::string> params;
+    std::vector<Type*> paramTypes;   // nuevo
+    Type* returnType;                // nuevo
     ASTNodePtr body;
-    FunctionDeclNode(std::string n, std::vector<std::string> p, ASTNodePtr b)
-        : name(std::move(n)), params(std::move(p)), body(b) {}
+    FunctionDeclNode(std::string n, std::vector<std::string> p, std::vector<Type*> pt, Type* rt, ASTNodePtr b)
+        : name(std::move(n)), params(std::move(p)), paramTypes(std::move(pt)), returnType(rt), body(b) {}
     ~FunctionDeclNode() { delete body; }
+
     void print(std::ostream& o, int indent_n = 0) const override {
         indent(o, indent_n);
         o << "FunctionDecl(" << name << ")\n";
@@ -235,6 +260,16 @@ struct LetBindingsNode : ASTNode {
         indent(o, indent_n);
         o << "LetBindings\n";
         for (auto* b : bindings) b->print(o, indent_n + 2);
+    }
+    Type* accept(Visitor& v) override { return v.visit(*this); }
+};
+
+struct TypeNode : ASTNode {
+    Type* type;
+    TypeNode(Type* t) : type(t) {}
+    void print(std::ostream& o, int indent_n = 0) const override {
+        indent(o, indent_n);
+        o << "Type(" << type->toString() << ")\n";
     }
     Type* accept(Visitor& v) override { return v.visit(*this); }
 };

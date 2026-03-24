@@ -31,12 +31,15 @@ public:
     Type* visit(FunctionCallNode& node) override;
     Type* visit(VariableNode& node) override;
     Type* visit(NumberNode& node) override;
+    Type* visit(BoolNode& node) override;
     Type* visit(BinaryOpNode& node) override;
+    Type* visit(StringNode& node) override;
+    Type* visit(UnaryOpNode& node) override;
 
     Type* visit(ExprStmtNode& node) override;
     Type* visit(ParamListNode& node) override;
     Type* visit(LetBindingNode& node) override;
     Type* visit(LetBindingsNode& node) override;
-    Type* visit(UnaryOpNode& node) override;
+    Type* visit(TypeNode& node) override;
     // ...
 };

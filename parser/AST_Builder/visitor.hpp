@@ -10,12 +10,16 @@ class IfNode;
 class FunctionCallNode;
 class VariableNode;
 class NumberNode;
+class StringNode;
+class BoolNode;
 class BinaryOpNode;
 class ExprStmtNode;
 class ParamListNode;
 class LetBindingNode;
 class LetBindingsNode;
 class UnaryOpNode;
+class TypeNode;
+
 
 class Visitor {
 public:
@@ -35,4 +39,7 @@ public:
     virtual Type* visit(LetBindingNode& node) = 0;
     virtual Type* visit(LetBindingsNode& node) = 0;
     virtual Type* visit(UnaryOpNode& node) = 0;
+    virtual Type* visit(StringNode& node) = 0;
+    virtual Type* visit(BoolNode& node) = 0;
+    virtual Type* visit(TypeNode& node) = 0;
 };
