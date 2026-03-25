@@ -3,6 +3,7 @@ CXXFLAGS = -Iinclude -std=c++17
 
 SRCS = \
     ../parser/AST_Builder/ast_builder.cpp \
+    ../parser/AST_Builder/ast_node.cpp \
     ../parser/Parser_Generator/lalr_algorithms.cpp \
     ../parser/Parser_Generator/parser_builder.cpp \
     ../parser/Parser_Generator/parser_runtime.cpp \
@@ -13,6 +14,7 @@ SRCS = \
     ../lexer/Lexer_Generator/nfa.cpp \
     ../lexer/Lexer_Generator/preprocessor.cpp \
     ../semantic/analyzer.cpp \
+    ../semantic/type_inference_visitor.cpp \
     pipeline_test.cpp \
 
 OBJS = $(SRCS:.cpp=.o)

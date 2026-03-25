@@ -1,21 +1,10 @@
+#include "visitor.hpp"
 #include "analyzer.hpp"
 #include <iostream>
 
 void SemanticAnalyzer::analyze(ProgramNode* root) {
-    std::cerr << "SemanticAnalyzer::analyze: entering global scope\n";
-    symTable.enterScope();
-    std::cerr << "SemanticAnalyzer::analyze: calling root->accept\n";
-
-    if (!root) {
-        std::cerr << "SemanticAnalyzer::analyze: root is null!\n";
-        return;
-    }
-    std::cerr << "SemanticAnalyzer::analyze: root = " << root << "\n";
     root->accept(*this);
-    std::cerr << "SemanticAnalyzer::analyze: exiting global scope\n";
-    symTable.exitScope();
     reportErrors();
-
 }
 
 void SemanticAnalyzer::reportErrors() const {
@@ -28,154 +17,189 @@ void SemanticAnalyzer::reportErrors() const {
 }
 
 Type* SemanticAnalyzer::visit(ProgramNode& node) {
-    std::cerr << "Visiting ProgramNode\n";
-
-    for (auto* decl : node.decls) decl->accept(*this); 
-    for (auto* stmt : node.stmts) stmt->accept(*this); 
+    for (auto* decl : node.decls) decl->accept(*this);
+    for (auto* stmt : node.stmts) stmt->accept(*this);
     return nullptr;
 }
 
 Type* SemanticAnalyzer::visit(BlockNode& node) {
     symTable.enterScope();
-    for (auto* stmt : node.stmts) stmt->accept(*this); 
+    for (auto* stmt : node.stmts) stmt->accept(*this);
     symTable.exitScope();
     return nullptr;
 }
 
 Type* SemanticAnalyzer::visit(FunctionDeclNode& node) {
-    if (symTable.lookupCurrent(node.name)) {
-        error("Función '" + node.name + "' ya declarada en este ámbito.");
+    // Verify function is already in the table
+    SymbolInfo* info = symTable.lookup(node.name);
+    if (!info || info->kind != SemanticSymbolKind::Function) {
+        error("Función '" + node.name + "' no encontrada en tabla.");
         return nullptr;
     }
-    FunctionType* funcType = new FunctionType(node.paramTypes, node.returnType);
-    SymbolInfo info{node.name, funcType, SemanticSymbolKind::Function, symTable.getCurrentLevel()};
-    if (!symTable.insert(node.name, info)) {
-        error("Función '" + node.name + "' no se pudo insertar.");
-        delete funcType;
+    FunctionType* funcType = dynamic_cast<FunctionType*>(info->type);
+    if (!funcType) {
+        error("Tipo incorrecto para función '" + node.name + "'.");
         return nullptr;
     }
+    // Check params number
+    if (node.params.size() != funcType->getParamTypes().size()) {
+        error("Declaración de función '" + node.name +
+              "' tiene número incorrecto de parámetros.");
+        return nullptr;
+    }
+    // Function scope
     symTable.enterScope();
+    // Insert parameters and their already inferred types
     for (size_t i = 0; i < node.params.size(); ++i) {
-        SymbolInfo paramInfo{node.params[i], node.paramTypes[i], SemanticSymbolKind::Parameter, symTable.getCurrentLevel()};
+        SymbolInfo paramInfo;
+        paramInfo.name = node.params[i];
+        paramInfo.type = funcType->getParamTypes()[i];
+        paramInfo.kind = SemanticSymbolKind::Parameter;
+        paramInfo.scopeLevel = symTable.getCurrentLevel();
         if (!symTable.insert(node.params[i], paramInfo)) {
             error("Parámetro duplicado: " + node.params[i]);
         }
     }
-    Type* oldReturn = currentFunctionReturnType;
-    currentFunctionReturnType = node.returnType;
+    // Check body
     node.body->accept(*this);
-    currentFunctionReturnType = oldReturn;
     symTable.exitScope();
     return nullptr;
 }
 
 Type* SemanticAnalyzer::visit(LetNode& node) {
-    Type* initType = node.init->accept(*this);  
-    if (!initType) {
-        error("No se pudo determinar tipo de inicialización de '" + node.name + "'.");
-        return nullptr;
-    }
+    // New scope for let body
     symTable.enterScope();
-    SymbolInfo varInfo{node.name, initType, SemanticSymbolKind::Variable, symTable.getCurrentLevel()};
-    if (!symTable.insert(node.name, varInfo)) {
-        error("Variable '" + node.name + "' ya declarada en este ámbito.");
-    }
-    Type* bodyType = node.body->accept(*this);  
-    symTable.exitScope();
-    return bodyType;
-}
 
-Type* SemanticAnalyzer::visit(IfNode& node) {
-    Type* condType = node.condition->accept(*this);  
-    if (!condType->equals(BoolType::instance())) {
-        error("Condición de 'if' debe ser booleana.");
-    }
-    Type* thenType = node.then_branch->accept(*this);  
-    Type* elseType = node.else_branch->accept(*this);  
-    if (thenType && elseType && !thenType->equals(elseType)) {
-        error("Las ramas 'then' y 'else' deben tener el mismo tipo.");
-    }
-    return thenType;
-}
-
-Type* SemanticAnalyzer::visit(FunctionCallNode& node) {
-    const SymbolInfo* sym = symTable.lookup(node.name);
-    if (!sym) {
-        error("Función '" + node.name + "' no declarada.");
-        return nullptr;
-    }
-    if (sym->kind != SemanticSymbolKind::Function) {
-        error("'" + node.name + "' no es una función.");
-        return nullptr;
-    }
-    FunctionType* funcType = dynamic_cast<FunctionType*>(sym->type);
-    if (!funcType) {
-        error("Tipo incorrecto para función '" + node.name + "'.");
-        return nullptr;
-    }
-    if (node.args.size() != funcType->getParamTypes().size()) {
-        error("Número incorrecto de argumentos para '" + node.name +
-              "'. Esperaba " + std::to_string(funcType->getParamTypes().size()) +
-              ", recibió " + std::to_string(node.args.size()));
-        return nullptr;
-    }
-    for (size_t i = 0; i < node.args.size(); ++i) {
-        Type* argType = node.args[i]->accept(*this);  
-        if (!argType->equals(funcType->getParamTypes()[i])) {
-            error("Argumento " + std::to_string(i+1) + " de '" + node.name +
-                  "' esperaba tipo " + funcType->getParamTypes()[i]->toString() +
-                  ", pero recibió " + argType->toString());
+    // Get the variable type from initialization (already inferred)
+    Type* varType = node.init->type;
+    if (!varType) {
+        error("Variable '" + node.name + "' no tiene tipo inferido.");
+    } else {
+        SymbolInfo varInfo{node.name, varType, SemanticSymbolKind::Variable, symTable.getCurrentLevel()};
+        if (!symTable.insert(node.name, varInfo)) {
+            error("Variable '" + node.name + "' ya declarada en este ámbito.");
         }
     }
-    return funcType->getReturnType();
-}
 
-Type* SemanticAnalyzer::visit(VariableNode& node) {
-    const SymbolInfo* sym = symTable.lookup(node.name);
-    if (!sym) {
-        error("Variable '" + node.name + "' no declarada.");
-        return nullptr;
-    }
-    if (sym->kind != SemanticSymbolKind::Variable && sym->kind != SemanticSymbolKind::Parameter) {
-        error("'" + node.name + "' no es una variable.");
-        return nullptr;
-    }
-    return sym->type;
-}
+    // Check the body
+    node.body->accept(*this);
 
-Type* SemanticAnalyzer::visit(NumberNode& node) {
-    return NumberType::instance();
-}
+    // Exit body scope
+    symTable.exitScope();
 
-Type* SemanticAnalyzer::visit(StringNode& node) {
-    return StringType::instance();
-}
-
-Type* SemanticAnalyzer::visit(BoolNode& node) {
-    return BoolType::instance();
-}
-
-
-Type* SemanticAnalyzer::visit(BinaryOpNode& node) {
-    Type* left = node.left->accept(*this);  
-    Type* right = node.right->accept(*this);
-    if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
-        error("Operadores aritméticos requieren operandos enteros.");
-    }
-    return NumberType::instance();
-}
-
-Type* SemanticAnalyzer::visit(ExprStmtNode& node) {
-    node.expr->accept(*this);  
     return nullptr;
 }
 
+Type* SemanticAnalyzer::visit(IfNode& node) {
+    Type* condType = node.condition->type;
+    if (!condType->equals(BoolType::instance())) {
+        error("If condition must be boolean.");
+    }
+    node.then_branch->accept(*this);
+    node.else_branch->accept(*this);
+    return nullptr;
+}
+
+Type* SemanticAnalyzer::visit(FunctionCallNode& node) {
+    SymbolInfo* funcInfo = symTable.lookup(node.name);
+    if (!funcInfo || funcInfo->kind != SemanticSymbolKind::Function) {
+        error("Function '" + node.name + "' not declared.");
+        return nullptr;
+    }
+    FunctionType* funcType = dynamic_cast<FunctionType*>(funcInfo->type);
+    if (!funcType) {
+        error("Wrong type for function '" + node.name + "'.");
+        return nullptr;
+    }
+    if (node.args.size() != funcType->getParamTypes().size()) {
+        error("Wrong params numbers for '" + node.name +
+              "'. Waited " + std::to_string(funcType->getParamTypes().size()) +
+              ", got " + std::to_string(node.args.size()));
+        return nullptr;
+    }
+    for (size_t i = 0; i < node.args.size(); ++i) {
+        Type* argType = node.args[i]->type;
+        if (!argType->equals(funcType->getParamTypes()[i])) {
+            error("Argument " + std::to_string(i+1) + " de '" + node.name +
+                  "' Waited type " + funcType->getParamTypes()[i]->toString() +
+                  ", but got " + argType->toString());
+        }
+    }
+    return nullptr;
+}
+
+Type* SemanticAnalyzer::visit(VariableNode& node) {
+    // Variable must b in table (already verified at inference)
+    SymbolInfo* sym = symTable.lookup(node.name);
+    if (!sym) {
+        error("Variable '" + node.name + "' not declared.");
+    }
+    return nullptr;
+}
+
+Type* SemanticAnalyzer::visit(BinaryOpNode& node) {
+    // Verify operands have the correct type acoording to operator
+    Type* left = node.left->type;
+    Type* right = node.right->type;
+    if (!left || !right) {
+        error("Typeless operand (inference error).");
+        return nullptr;
+    }
+    if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/") {
+        if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
+            error("arithmetic operadrands require Number operands.");
+        }
+    } else if (node.op == "<" || node.op == ">" || node.op == "<=" || node.op == ">=") {
+        if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
+            error("relactional operands require Number operands.");
+        }
+    } else if (node.op == "==") {
+        if (!left->equals(right)) {
+            error("Operador '==' requires same type operands.");
+        }
+    } else if (node.op == "@") {
+        if (!left->equals(StringType::instance()) && !right->equals(StringType::instance())) {
+            error("Operator '@' requires one String operand.");
+        }
+    } else {
+        error("Binary operator not supported.");
+    }
+    return nullptr;
+}
+
+Type* SemanticAnalyzer::visit(UnaryOpNode& node) {
+    Type* operand = node.operand->type;
+    if (!operand) {
+        error("Typeless operand (inference error).");
+        return nullptr;
+    }
+    if (node.op == "-") {
+        if (!operand->equals(NumberType::instance())) {
+            error("Unary operator '!' requires Number operands.");
+        }
+    } else if (node.op == "!") {
+        if (!operand->equals(BoolType::instance())) {
+            error("Unary operator '!' requires Boolean operands.");
+        }
+    } else {
+        error("Unary operator not supported");
+    }
+    return nullptr;
+}
+
+Type* SemanticAnalyzer::visit(ExprStmtNode& node) {
+    node.expr->accept(*this);
+    return nullptr;
+}
+
+Type* SemanticAnalyzer::visit(TypeNode& node) {
+    return nullptr;
+}
+
+// Aux nodes
+Type* SemanticAnalyzer::visit(NumberNode& node) { return nullptr; }
+Type* SemanticAnalyzer::visit(BoolNode& node) { return nullptr; }
+Type* SemanticAnalyzer::visit(StringNode& node) { return nullptr; }
 Type* SemanticAnalyzer::visit(ParamListNode& node) { return nullptr; }
 Type* SemanticAnalyzer::visit(LetBindingNode& node) { return nullptr; }
 Type* SemanticAnalyzer::visit(LetBindingsNode& node) { return nullptr; }
-Type* SemanticAnalyzer::visit(UnaryOpNode& node) {
-    node.operand->accept(*this);
-    return NumberType::instance();
-}
-
-Type* SemanticAnalyzer::visit(TypeNode& node) { return node.type; }

@@ -1,5 +1,6 @@
 #pragma once
-#include "../../semantic/type.hpp"
+#include "../parser/AST_Builder/ast_node.hpp"
+#include "type.hpp"
 
 // Forward declarations
 class ProgramNode;

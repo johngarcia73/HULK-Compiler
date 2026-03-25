@@ -1,10 +1,10 @@
 #pragma once
 #include "visitor.hpp"
-#include "symbol_table.hpp"
+#include "symbol_table.hpp"   
 #include <vector>
 #include <string>
 
-class SemanticAnalyzer : public Visitor {
+class TypeInferenceVisitor : public Visitor {
     SemanticSymbolTable& symTable;
     std::vector<std::string> errors;
 
@@ -12,15 +12,12 @@ class SemanticAnalyzer : public Visitor {
     void reportErrors() const;
 
 public:
-    SemanticAnalyzer(SemanticSymbolTable& table) : symTable(table) {}
+    TypeInferenceVisitor(SemanticSymbolTable& table) : symTable(table) {}
 
-    void analyze(ProgramNode* root);
+    void infer(ProgramNode* root);
     bool hasErrors() const { return !errors.empty(); }
     const std::vector<std::string>& getErrors() const { return errors; }
 
-    const SemanticSymbolTable& getSymbolTable() const { return symTable; }
-
-    // visit Methods(just check)
     Type* visit(ProgramNode& node) override;
     Type* visit(BlockNode& node) override;
     Type* visit(FunctionDeclNode& node) override;

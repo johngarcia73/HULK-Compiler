@@ -80,3 +80,30 @@ public:
 private:
     StringType() = default;
 };
+
+class VoidType : public Type {
+public:
+    static VoidType* instance() { static VoidType inst; return &inst; }
+    std::string toString() const override { return "Void"; }
+    bool equals(const Type* other) const override { return dynamic_cast<const VoidType*>(other) != nullptr; }
+private:
+    VoidType() = default;
+};
+
+class UnknownType : public Type {
+public:
+    static UnknownType* instance() { static UnknownType inst; return &inst; }
+    std::string toString() const override { return "Unknown"; }
+    bool equals(const Type* other) const override { return dynamic_cast<const UnknownType*>(other) != nullptr; }
+private:
+    UnknownType() = default;
+};
+
+class AnyType : public Type {
+public:
+    static AnyType* instance() { static AnyType inst; return &inst; }
+    std::string toString() const override { return "Any"; }
+    bool equals(const Type* other) const override { return dynamic_cast<const AnyType*>(other) != nullptr; }
+private:
+    AnyType() = default;
+};

@@ -60,6 +60,17 @@ public:
         return it != cur.end() ? &it->second : nullptr;
     }
 
+
+    void update(const std::string& name, const SymbolInfo& info) {
+        for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+            auto found = it->find(name);
+            if (found != it->end()) {
+                found->second = info;
+                return;
+            }
+        }
+    }
+    
     // For debgging
     void dump() const {
         std::cout << "Symbol table (scopes: " << scopes.size() << ")\n";
@@ -71,4 +82,5 @@ public:
             }
         }
     }
+
 };

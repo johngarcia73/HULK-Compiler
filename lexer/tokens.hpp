@@ -26,7 +26,13 @@ enum class TokenType : int {
     TOKEN_R_CURL_BRACK,
     TOKEN_SEMICOLON,
     TOKEN_COMMA,
+    TOKEN_EQUALITY,
     TOKEN_EQUAL,
+    TOKEN_LESS_THAN,
+    TOKEN_GREATER_THAN,
+    TOKEN_LESS_EQUALS,
+    TOKEN_GREATER_EQUALS,
+    TOKEN_CONCAT,
     TOKEN_IDENTIFIER,
     TOKEN_WHITESPACE,
     TOKEN_COLON,
@@ -61,6 +67,7 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_MINUS:        return "MINUS";
         case TokenType::TOKEN_STAR:         return "STAR";
         case TokenType::TOKEN_SLASH:        return "SLASH";
+        case TokenType::TOKEN_CONCAT:        return "CONCAT";
         case TokenType::TOKEN_LPAREN:       return "L_PAREN";
         case TokenType::TOKEN_RPAREN:       return "R_PAREN";
         case TokenType::TOKEN_FUNCTION:     return "FUNCTION";
@@ -74,7 +81,12 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_IN:           return "IN";
         case TokenType::TOKEN_IF:           return "IF";
         case TokenType::TOKEN_ELSE:         return "ELSE";
+        case TokenType::TOKEN_EQUALITY:     return "EQUALITY";
         case TokenType::TOKEN_EQUAL:        return "EQUAL";
+        case TokenType::TOKEN_LESS_THAN:    return "LESS_THAN";
+        case TokenType::TOKEN_GREATER_THAN: return "GREATER_THAN";
+        case TokenType::TOKEN_LESS_EQUALS: return "LESSER_EQUALS";
+        case TokenType::TOKEN_GREATER_EQUALS: return "GREATER_EQUALS";
         case TokenType::TOKEN_COLON:        return "COLON";
         case TokenType::TOKEN_EOF:          return "$";
         default:                            return "UNKNOWN";
@@ -110,12 +122,18 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_MINUS,    "-",   false },
         { TokenType::TOKEN_STAR,     "\\*", false },
         { TokenType::TOKEN_SLASH,    "/",   false },
+        { TokenType::TOKEN_CONCAT,    "@",   false },
+        { TokenType::TOKEN_LESS_THAN,    "<",   false },
+        { TokenType::TOKEN_GREATER_THAN,    ">",   false },
+        { TokenType::TOKEN_LESS_EQUALS,    ">=",   false },
+        { TokenType::TOKEN_GREATER_EQUALS,    ">=",   false },
         { TokenType::TOKEN_LPAREN,   "\\(", false },
         { TokenType::TOKEN_RPAREN,   "\\)", false },
         { TokenType::TOKEN_L_CURL_BRACK, "\\{", false },
         { TokenType::TOKEN_R_CURL_BRACK, "\\}", false },
         { TokenType::TOKEN_SEMICOLON, ";", false },
         { TokenType::TOKEN_COMMA,    ",", false },
+        { TokenType::TOKEN_EQUALITY,    "==",  false },
         { TokenType::TOKEN_EQUAL,    "=",  false },
         { TokenType::TOKEN_COLON, ":", false },
         // Identifiers

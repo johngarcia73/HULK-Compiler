@@ -6,10 +6,13 @@
 %token LET IN
 %token IF ELSE
 %token PLUS MINUS STAR SLASH
+%token CONCAT                    /* @ */
+%token LESS_THAN GREATER_THAN LESS_EQUALS GREATER_EQUALS EQUALITY
 %token NUMBER
 %token NUMBER_TYPE
 %token BOOL_TYPE
 %token STRING_TYPE
+%token STRING                    /* literal de cadena */
 %token IDENTIFIER
 %token EQUAL
 %token EOF 0
@@ -17,6 +20,8 @@
 
 %start program
 
+%nonassoc LESS_THAN GREATER_THAN LESS_EQUALS GREATER_EQUALS EQUALITY
+%left CONCAT
 %left PLUS MINUS
 %left STAR SLASH
 
@@ -38,13 +43,9 @@ param_list_opt : /* empty */
 param_list : IDENTIFIER COLON type
            | param_list COMMA IDENTIFIER COLON type
 
-
-
-
 type : NUMBER_TYPE
      | BOOL_TYPE
      | STRING_TYPE
-
 
 statements : /* empty */
            | statements statement
@@ -54,20 +55,35 @@ statement : expr SEMICOLON
 
 block : L_CURL_BRACK statements R_CURL_BRACK
 
-expr : additive
+expr : relational
      | let_expr
      | if_expr
      | call_expr
+
+relational : concatenation
+           | concatenation LESS_THAN concatenation
+           | concatenation GREATER_THAN concatenation
+           | concatenation LESS_EQUALS concatenation
+           | concatenation GREATER_EQUALS concatenation
+           | concatenation EQUALITY concatenation
+
+concatenation : additive
+              | concatenation CONCAT additive
 
 additive : multiplicative
          | additive PLUS multiplicative
          | additive MINUS multiplicative
 
-multiplicative : primary
-               | multiplicative STAR primary
-               | multiplicative SLASH primary
+multiplicative : unary
+               | multiplicative STAR unary
+               | multiplicative SLASH unary
+
+unary : MINUS unary
+      | PLUS unary
+      | primary
 
 primary : NUMBER
+        | STRING
         | IDENTIFIER
         | L_PAREN expr R_PAREN
 

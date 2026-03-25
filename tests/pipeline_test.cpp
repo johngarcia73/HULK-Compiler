@@ -7,6 +7,7 @@
 #include "../parser/Parser_Generator/genparser.hpp"
 #include "../lexer/lexer.hpp"  
 #include "../semantic/analyzer.hpp"   
+#include "../semantic/type_inference_visitor.hpp"   
 
 #include <string>
 #include <iostream>
@@ -122,21 +123,34 @@ int main()
             }
             std::cerr << "ProgramNode address: " << program << "\n";
 
-            program->test();
-            SemanticAnalyzer analyzer;
+            program->test(); 
+
+            // Create the symbols table
+            SemanticSymbolTable symTable;
+            symTable.enterScope();
+
+            // Type inference (annotates AST)
+            TypeInferenceVisitor inferencer(symTable);
+            inferencer.infer(program);
+            if (inferencer.hasErrors()) {
+                std::cout << "✗ Type inference failed.\n";
+                return 1;
+            }
+
+            // Semantic analysis
+            SemanticAnalyzer analyzer(symTable);
             analyzer.analyze(program);
-            
+            symTable.exitScope();
+
             if (analyzer.hasErrors()) {
-                
                 std::cout << "✗ Semantic analysis failed.\n";
                 return 1;
             } else {
                 std::cout << "✓ Semantic analysis successful.\n";
-                
+                // Shows symbols table
                 analyzer.getSymbolTable().dump();
             }
 
-            
         } else {
             std::cout << "✗ No AST to analyze.\n";
             return 1;
