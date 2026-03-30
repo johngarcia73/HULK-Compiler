@@ -15,6 +15,7 @@ SRCS = \
     ../lexer/Lexer_Generator/preprocessor.cpp \
     ../semantic/analyzer.cpp \
     ../semantic/type_inference_visitor.cpp \
+    ../ir_generator/ir_generator.cpp \
     pipeline_test.cpp \
 
 OBJS = $(SRCS:.cpp=.o)

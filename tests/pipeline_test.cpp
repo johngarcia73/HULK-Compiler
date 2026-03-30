@@ -8,6 +8,7 @@
 #include "../lexer/lexer.hpp"  
 #include "../semantic/analyzer.hpp"   
 #include "../semantic/type_inference_visitor.hpp"   
+#include "../ir_generator/ir_generator.hpp"
 
 #include <string>
 #include <iostream>
@@ -142,6 +143,12 @@ int main()
             analyzer.analyze(program);
             symTable.exitScope();
 
+            // Banner IR generation
+            IRGenerator irGen;
+            std::string bannerIR = irGen.generate(program);
+            std::cout << "\n=== Generated BANNER IR ===\n\n";
+            std::cout << bannerIR << "\n";
+
             if (analyzer.hasErrors()) {
                 std::cout << "✗ Semantic analysis failed.\n";
                 return 1;
@@ -185,6 +192,7 @@ int main()
 
         std::cout << "\n";
 
+        
         
         return 0;
     }
