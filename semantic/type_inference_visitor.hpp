@@ -1,23 +1,30 @@
 #pragma once
 #include "visitor.hpp"
-#include "symbol_table.hpp"   
+#include "symbol_table.hpp"
+#include "dependency_graph.hpp"   // nuevo
 #include <vector>
 #include <string>
 
 class TypeInferenceVisitor : public Visitor {
     SemanticSymbolTable& symTable;
+    DependencyGraph& depGraph;
+    std::vector<FunctionDeclNode*> pendingFunctions;  // declarations to process
+    std::vector<DepNode*> currentFuncStack;          // functions stack (for dependencies)
+    bool collecting;                                 // collector phase
     std::vector<std::string> errors;
 
     void error(const std::string& msg) { errors.push_back(msg); }
     void reportErrors() const;
 
 public:
-    TypeInferenceVisitor(SemanticSymbolTable& table) : symTable(table) {}
+    TypeInferenceVisitor(SemanticSymbolTable& table, DependencyGraph& graph)
+        : symTable(table), depGraph(graph), collecting(true) {}
 
     void infer(ProgramNode* root);
     bool hasErrors() const { return !errors.empty(); }
     const std::vector<std::string>& getErrors() const { return errors; }
 
+    // visit methods (todos los nodos del AST)
     Type* visit(ProgramNode& node) override;
     Type* visit(BlockNode& node) override;
     Type* visit(FunctionDeclNode& node) override;

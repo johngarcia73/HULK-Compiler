@@ -131,17 +131,22 @@ int main()
             symTable.enterScope();
 
             // Type inference (annotates AST)
-            TypeInferenceVisitor inferencer(symTable);
+            DependencyGraph graph;
+            TypeInferenceVisitor inferencer(symTable, graph);
             inferencer.infer(program);
+            
+            symTable.exitScope();
+            
             if (inferencer.hasErrors()) {
-                std::cout << "✗ Type inference failed.\n";
+                std::cout << "✗ Semantic analysis failed.\n";
                 return 1;
+            } else {
+                std::cout << "✓ Semantic analysis successful.\n";
+                // Mostrar el grafo de dependencias (opcional)
+                graph.topologicalSort();
+                graph.dump();
             }
 
-            // Semantic analysis
-            SemanticAnalyzer analyzer(symTable);
-            analyzer.analyze(program);
-            symTable.exitScope();
 
             // Banner IR generation
             IRGenerator irGen;
@@ -149,14 +154,6 @@ int main()
             std::cout << "\n=== Generated BANNER IR ===\n\n";
             std::cout << bannerIR << "\n";
 
-            if (analyzer.hasErrors()) {
-                std::cout << "✗ Semantic analysis failed.\n";
-                return 1;
-            } else {
-                std::cout << "✓ Semantic analysis successful.\n";
-                // Shows symbols table
-                analyzer.getSymbolTable().dump();
-            }
 
         } else {
             std::cout << "✗ No AST to analyze.\n";
