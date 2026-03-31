@@ -146,6 +146,84 @@ struct FunctionCallNode : ASTNode {
     Type* accept(Visitor& v) override;
 };
 
+struct AssignmentNode : ASTNode {
+    std::string target;
+    ASTNodePtr value;
+    AssignmentNode(std::string t, ASTNodePtr v);
+    ~AssignmentNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
+struct MemberAccessNode : ASTNode {
+    ASTNodePtr base;
+    std::string member;
+    MemberAccessNode(ASTNodePtr b, std::string m);
+    ~MemberAccessNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
+struct NewNode : ASTNode {
+    std::string typeName;
+    std::vector<ASTNodePtr> args;
+    NewNode(std::string t, std::vector<ASTNodePtr> a);
+    ~NewNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
+struct WhileNode : ASTNode {
+    ASTNodePtr condition;
+    ASTNodePtr body;
+    WhileNode(ASTNodePtr c, ASTNodePtr b);
+    ~WhileNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
+struct ForNode : ASTNode {
+    std::string iterator;
+    ASTNodePtr iterable;
+    ASTNodePtr body;
+    ForNode(std::string it, ASTNodePtr iter, ASTNodePtr b);
+    ~ForNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
+struct AttributeDeclNode : ASTNode {
+    std::string name;
+    ASTNodePtr init;
+    AttributeDeclNode(std::string n, ASTNodePtr i);
+    ~AttributeDeclNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
+struct TypeDeclNode : ASTNode {
+    std::string name;
+    std::vector<std::string> ctorParams;
+    std::string parentType;
+    std::vector<ASTNodePtr> parentArgs;
+    std::vector<ASTNodePtr> members;
+    TypeDeclNode(std::string n, std::vector<std::string> cp, std::string pt, 
+                 std::vector<ASTNodePtr> pa, std::vector<ASTNodePtr> m);
+    ~TypeDeclNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
+struct ProtocolDeclNode : ASTNode {
+    std::string name;
+    std::string extendedProtocol;
+    std::vector<ASTNodePtr> methods;
+    ProtocolDeclNode(std::string n, std::string ep, std::vector<ASTNodePtr> m);
+    ~ProtocolDeclNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
 // ============================================================================
 // Aux nodes
 // ============================================================================

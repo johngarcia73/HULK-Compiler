@@ -340,3 +340,197 @@ void TypeNode::print(std::ostream& o, int indent_n) const {
 Type* TypeNode::accept(Visitor& v) {
     return v.visit(*this);
 }
+
+// ------------------------------------------------------------
+// AssignmentNode
+// ------------------------------------------------------------
+AssignmentNode::AssignmentNode(std::string t, ASTNodePtr v)
+    : target(std::move(t)), value(v) {}
+
+AssignmentNode::~AssignmentNode() {
+    delete value;
+}
+
+void AssignmentNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "Assignment(" << target << ")\n";
+    if (value) value->print(o, indent_n + 2);
+}
+
+Type* AssignmentNode::accept(Visitor& v) {
+    throw std::runtime_error("AssignmentNode::accept not implemented");
+}
+
+// ------------------------------------------------------------
+// MemberAccessNode
+// ------------------------------------------------------------
+MemberAccessNode::MemberAccessNode(ASTNodePtr b, std::string m)
+    : base(b), member(std::move(m)) {}
+
+MemberAccessNode::~MemberAccessNode() {
+    delete base;
+}
+
+void MemberAccessNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "MemberAccess(" << member << ")\n";
+    if (base) base->print(o, indent_n + 2);
+}
+
+Type* MemberAccessNode::accept(Visitor& v) {
+    throw std::runtime_error("MemberAccessNode::accept not implemented");
+}
+
+// ------------------------------------------------------------
+// NewNode
+// ------------------------------------------------------------
+NewNode::NewNode(std::string t, std::vector<ASTNodePtr> a)
+    : typeName(std::move(t)), args(std::move(a)) {}
+
+NewNode::~NewNode() {
+    for (auto* a : args) delete a;
+}
+
+void NewNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "New(" << typeName << ")\n";
+    for (auto* a : args) a->print(o, indent_n + 2);
+}
+
+Type* NewNode::accept(Visitor& v) {
+    throw std::runtime_error("NewNode::accept not implemented");
+}
+
+// ------------------------------------------------------------
+// WhileNode
+// ------------------------------------------------------------
+WhileNode::WhileNode(ASTNodePtr c, ASTNodePtr b)
+    : condition(c), body(b) {}
+
+WhileNode::~WhileNode() {
+    delete condition;
+    delete body;
+}
+
+void WhileNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "While\n";
+    indent(o, indent_n + 2); o << "Condition:\n";
+    if (condition) condition->print(o, indent_n + 4);
+    indent(o, indent_n + 2); o << "Body:\n";
+    if (body) body->print(o, indent_n + 4);
+}
+
+Type* WhileNode::accept(Visitor& v) {
+    throw std::runtime_error("WhileNode::accept not implemented");
+}
+
+// ------------------------------------------------------------
+// ForNode
+// ------------------------------------------------------------
+ForNode::ForNode(std::string it, ASTNodePtr iter, ASTNodePtr b)
+    : iterator(std::move(it)), iterable(iter), body(b) {}
+
+ForNode::~ForNode() {
+    delete iterable;
+    delete body;
+}
+
+void ForNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "For(" << iterator << ")\n";
+    indent(o, indent_n + 2); o << "Iterable:\n";
+    if (iterable) iterable->print(o, indent_n + 4);
+    indent(o, indent_n + 2); o << "Body:\n";
+    if (body) body->print(o, indent_n + 4);
+}
+
+Type* ForNode::accept(Visitor& v) {
+    throw std::runtime_error("ForNode::accept not implemented");
+}
+
+// ------------------------------------------------------------
+// AttributeDeclNode
+// ------------------------------------------------------------
+AttributeDeclNode::AttributeDeclNode(std::string n, ASTNodePtr i)
+    : name(std::move(n)), init(i) {}
+
+AttributeDeclNode::~AttributeDeclNode() {
+    delete init;
+}
+
+void AttributeDeclNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "AttributeDecl(" << name << ")\n";
+    if (init) init->print(o, indent_n + 2);
+}
+
+Type* AttributeDeclNode::accept(Visitor& v) {
+    throw std::runtime_error("AttributeDeclNode::accept not implemented");
+}
+
+// ------------------------------------------------------------
+// TypeDeclNode
+// ------------------------------------------------------------
+TypeDeclNode::TypeDeclNode(std::string n, std::vector<std::string> cp, std::string pt, 
+                           std::vector<ASTNodePtr> pa, std::vector<ASTNodePtr> m)
+    : name(std::move(n)), ctorParams(std::move(cp)), parentType(std::move(pt)), 
+      parentArgs(std::move(pa)), members(std::move(m)) {}
+
+TypeDeclNode::~TypeDeclNode() {
+    for (auto* pa : parentArgs) delete pa;
+    for (auto* m : members) delete m;
+}
+
+void TypeDeclNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "TypeDecl(" << name << ")\n";
+    indent(o, indent_n + 2);
+    o << "CtorParams:";
+    for (auto& p : ctorParams) o << " " << p;
+    o << "\n";
+    indent(o, indent_n + 2);
+    o << "ParentType: " << parentType << "\n";
+    if (!parentArgs.empty()) {
+        indent(o, indent_n + 2);
+        o << "ParentArgs:\n";
+        for (auto* pa : parentArgs) pa->print(o, indent_n + 4);
+    }
+    if (!members.empty()) {
+        indent(o, indent_n + 2);
+        o << "Members:\n";
+        for (auto* m : members) m->print(o, indent_n + 4);
+    }
+}
+
+Type* TypeDeclNode::accept(Visitor& v) {
+    throw std::runtime_error("TypeDeclNode::accept not implemented");
+}
+
+// ------------------------------------------------------------
+// ProtocolDeclNode
+// ------------------------------------------------------------
+ProtocolDeclNode::ProtocolDeclNode(std::string n, std::string ep, std::vector<ASTNodePtr> m)
+    : name(std::move(n)), extendedProtocol(std::move(ep)), methods(std::move(m)) {}
+
+ProtocolDeclNode::~ProtocolDeclNode() {
+    for (auto* m : methods) delete m;
+}
+
+void ProtocolDeclNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "ProtocolDecl(" << name << ")\n";
+    indent(o, indent_n + 2);
+    o << "Extends: " << extendedProtocol << "\n";
+    if (!methods.empty()) {
+        indent(o, indent_n + 2);
+        o << "Methods:\n";
+        for (auto* m : methods) m->print(o, indent_n + 4);
+    }
+}
+
+Type* ProtocolDeclNode::accept(Visitor& v) {
+    throw std::runtime_error("ProtocolDeclNode::accept not implemented");
+}
+
+
