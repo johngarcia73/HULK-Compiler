@@ -6,6 +6,8 @@
 #include"lexer.hpp"
 #include"./Lexer_Generator/preprocessor.hpp"
 #include <stdexcept>
+#include <iostream>
+#include <regex>
 
 Lexer::Lexer(const std::vector<TokenSpec>& specs) {
 
@@ -24,10 +26,13 @@ std::vector<Token> Lexer::tokenize(const std::string& input) {
     if (!built)
         throw std::runtime_error("Lexer no construido");
 
+    std::regex newlines_re("(\n|\r)+");
+
+    std::string stripped_input = std::regex_replace(input, newlines_re, "");
     std::vector<Token> tokens;
 
     size_t pos = 0;
-    size_t length = input.size();
+    size_t length = stripped_input.size();
 
     while (pos < length) {
 
@@ -39,8 +44,10 @@ std::vector<Token> Lexer::tokenize(const std::string& input) {
 
         while (i < length) {
 
-            char c = input[i];
+            char c = stripped_input[i];
 
+            std::cout<<"Char: "<< int(c)<< "\n";
+            
             if (!dfa.transitions.count(state) ||
                 !dfa.transitions.at(state).count(c))
                 break;
@@ -53,6 +60,7 @@ std::vector<Token> Lexer::tokenize(const std::string& input) {
             }
 
             i++;
+
         }
 
         if (last_accept_state == -1) {
@@ -67,7 +75,7 @@ std::vector<Token> Lexer::tokenize(const std::string& input) {
             continue;
         }
 
-        std::string lexeme = input.substr(pos, last_accept_pos - pos);
+        std::string lexeme = stripped_input.substr(pos, last_accept_pos - pos);
 
         tokens.push_back(Token{static_cast<uint32_t>(token_id), lexeme});
 

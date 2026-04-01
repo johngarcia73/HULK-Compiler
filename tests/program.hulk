@@ -1,1 +1,17 @@
-function isEven(n: Number): Number {if (n == 0) 1 else isOdd(n - 1);} function isOdd(n: Number): Number {if (n == 0) 0 else isEven(n - 1);} let a = 5 in isEven(a);
+function isEven(n: Number): Number
+{
+    if (n == 0)
+     1 
+    else
+     isOdd(n - 1);
+}
+
+function isOdd(n: Number): Number
+{
+    if (n == 0)
+     0 
+    else
+     isEven(n - 1);
+}
+
+let a = 5 in isEven(a);
