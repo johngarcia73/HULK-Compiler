@@ -1,89 +1,60 @@
 #include "ast_builder.hpp"
+#include "ast_bulder_utils.hpp"
 #include <cassert>
-#include <cstdlib>
 #include <iostream>
 #include <algorithm>
 
-//---------------------Utils--------------------------------
-#define CHECK_RHS_IDX(pid, idx) do { \
-    if (rhs.size() <= (idx)) { \
-        std::cerr << "ASTBuilder: producción " << (pid) << " requiere índice " << (idx) \
-                  << " pero rhs.size() = " << rhs.size() << "\n"; \
-        return nullptr; \
-    } \
-} while(0)
-
+// Utility functions
 static long long parse_int(const std::optional<std::string>& s) {
     if (!s) return 0;
-    try {
-        return std::stoll(*s);
-    } catch(...) {
-        return 0;
-    }
+    try { return std::stoll(*s); }
+    catch(...) { return 0; }
 }
 
-Type* tokenToType(const Value& v) {
-    std::string tokenName = v.token_text.value_or("");
-    if (tokenName == "NUMBER_TYPE") return NumberType::instance();
-    if (tokenName == "BOOL_TYPE")   return BoolType::instance();
-    if (tokenName == "STRING_TYPE") return StringType::instance();
+static Type* tokenToType(const Value& v) {
+    std::string name = v.token_text.value_or("");
+    if (name == "NUMBER_TYPE") return NumberType::instance();
+    if (name == "BOOL_TYPE")   return BoolType::instance();
+    if (name == "STRING_TYPE") return StringType::instance();
     return nullptr;
 }
-//---------------------------------------------------------
 
+// ASTBuilder::build - production dispatcher
+// ----------------------------------------------------------------------
 ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     switch (pid) {
-        // 0: program : declarations statements
-        case 0: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 1);
+        // ========== Program structure ==========
+        case 0: { // program : declarations statements
+            // Extract declarations BlockNode (or create empty)
             std::vector<ASTNode*> decls;
+            if (auto* block = dynamic_cast<BlockNode*>(RHS(0))) {
+                decls = std::move(block->stmts);
+                delete block;
+            } else if (RHS(0)) decls.push_back(RHS(0));
+            
+            // Extract statements BlockNode
             std::vector<ASTNode*> stmts;
-            BlockNode* bn = dynamic_cast<BlockNode*>(rhs[0].node);
-            if (bn) {
-                for (auto p : bn->stmts) decls.push_back(p);
-                bn->stmts.clear();
-                delete bn;
-            } else if (rhs[0].node) decls.push_back(rhs[0].node);
-            BlockNode* bn2 = dynamic_cast<BlockNode*>(rhs[1].node);
-            if (bn2) {
-                for (auto p : bn2->stmts) stmts.push_back(p);
-                bn2->stmts.clear();
-                delete bn2;
-            } else if (rhs[1].node) stmts.push_back(rhs[1].node);
+            if (auto* block = dynamic_cast<BlockNode*>(RHS(1))) {
+                stmts = std::move(block->stmts);
+                delete block;
+            } else if (RHS(1)) stmts.push_back(RHS(1));
+            
             return new ProgramNode(std::move(decls), std::move(stmts));
         }
 
-        // 1: declarations : /* empty */
-        case 1:
-            return new BlockNode({});
+        case 1: // declarations : /* empty */
+            EMPTY_BLOCK();
 
-        // 2: declarations : declarations declaration
-        case 2: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 1);
-            BlockNode* left = dynamic_cast<BlockNode*>(rhs[0].node);
-            std::vector<ASTNode*> items;
-            if (left) {
-                items = std::move(left->stmts);
-                delete left;
-            }
-            if (rhs[1].node) items.push_back(rhs[1].node);
-            return new BlockNode(std::move(items));
-        }
+        case 2: // declarations : declarations declaration
+            BUILD_BLOCK(RHS(0), RHS(1));
 
-        // 3: declaration : function_decl
-        case 3:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
+        case 3: // declaration : function_decl
+            PASS();
 
-        // 4: function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN block
-        case 4: {
-            CHECK_RHS_IDX(pid, 1); // IDENTIFIER
-            CHECK_RHS_IDX(pid, 3); // param_list_opt
-            CHECK_RHS_IDX(pid, 5); // block
-            std::string name = rhs[1].token_text.value_or("");
-            ParamListNode* paramsNode = dynamic_cast<ParamListNode*>(rhs[3].node);
+        // ========== Function declarations ==========
+        case 4: { // function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN block
+            std::string name = TOKEN(1);
+            auto* paramsNode = dynamic_cast<ParamListNode*>(RHS(3));
             std::vector<std::string> params;
             std::vector<Type*> paramTypes;
             if (paramsNode) {
@@ -91,19 +62,14 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
                 paramTypes = std::move(paramsNode->paramTypes);
                 delete paramsNode;
             }
-            Type* retType = NumberType::instance(); // por defecto
-            ASTNode* body = rhs[5].node;
-            return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, body);
+            // Default return type is Number
+            Type* retType = NumberType::instance();
+            return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, RHS(5));
         }
 
-        // 5: function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type block
-        case 5: {
-            CHECK_RHS_IDX(pid, 1); // IDENTIFIER
-            CHECK_RHS_IDX(pid, 3); // param_list_opt
-            CHECK_RHS_IDX(pid, 6); // type
-            CHECK_RHS_IDX(pid, 7); // block
-            std::string name = rhs[1].token_text.value_or("");
-            ParamListNode* paramsNode = dynamic_cast<ParamListNode*>(rhs[3].node);
+        case 5: { // function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type block
+            std::string name = TOKEN(1);
+            auto* paramsNode = dynamic_cast<ParamListNode*>(RHS(3));
             std::vector<std::string> params;
             std::vector<Type*> paramTypes;
             if (paramsNode) {
@@ -111,41 +77,28 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
                 paramTypes = std::move(paramsNode->paramTypes);
                 delete paramsNode;
             }
-            TypeNode* typeNode = dynamic_cast<TypeNode*>(rhs[6].node);
+            auto* typeNode = dynamic_cast<TypeNode*>(RHS(6));
             Type* retType = typeNode ? typeNode->type : NumberType::instance();
-            if (typeNode) delete typeNode;
-            ASTNode* body = rhs[7].node;
-            return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, body);
+            delete typeNode;
+            return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, RHS(7));
         }
 
-        // 6: param_list_opt : /* empty */
-        case 6:
+        // Parameters
+        case 6: // param_list_opt : /* empty */
             return new ParamListNode({}, {});
-
-        // 7: param_list_opt : param_list
-        case 7:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
-
-        // 8: param_list : IDENTIFIER COLON type
-        case 8: {
-            CHECK_RHS_IDX(pid, 0); // IDENTIFIER
-            CHECK_RHS_IDX(pid, 2); // type
-            std::string name = rhs[0].token_text.value_or("");
-            TypeNode* typeNode = dynamic_cast<TypeNode*>(rhs[2].node);
+        case 7: // param_list_opt : param_list
+            PASS();
+        case 8: { // param_list : IDENTIFIER COLON type
+            std::string name = TOKEN(0);
+            auto* typeNode = dynamic_cast<TypeNode*>(RHS(2));
             Type* type = typeNode ? typeNode->type : NumberType::instance();
             delete typeNode;
             return new ParamListNode({name}, {type});
         }
-
-        // 9: param_list : param_list COMMA IDENTIFIER COLON type
-        case 9: {
-            CHECK_RHS_IDX(pid, 0); // param_list
-            CHECK_RHS_IDX(pid, 2); // IDENTIFIER
-            CHECK_RHS_IDX(pid, 4); // type
-            ParamListNode* left = dynamic_cast<ParamListNode*>(rhs[0].node);
-            std::string name = rhs[2].token_text.value_or("");
-            TypeNode* typeNode = dynamic_cast<TypeNode*>(rhs[4].node);
+        case 9: { // param_list : param_list COMMA IDENTIFIER COLON type
+            auto* left = dynamic_cast<ParamListNode*>(RHS(0));
+            std::string name = TOKEN(2);
+            auto* typeNode = dynamic_cast<TypeNode*>(RHS(4));
             Type* type = typeNode ? typeNode->type : NumberType::instance();
             delete typeNode;
             std::vector<std::string> params = std::move(left->params);
@@ -156,290 +109,100 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             return new ParamListNode(std::move(params), std::move(types));
         }
 
-        // 10: type -> NUMBER_TYPE
-        case 10:
-            return new TypeNode(NumberType::instance());
+        // ========== Types ==========
+        case 10: return new TypeNode(NumberType::instance());
+        case 11: return new TypeNode(BoolType::instance());
+        case 12: return new TypeNode(StringType::instance());
 
-        // 11: type -> BOOL_TYPE
-        case 11:
-            return new TypeNode(BoolType::instance());
-
-        // 12: type -> STRING_TYPE
-        case 12:
-            return new TypeNode(StringType::instance());
-
-        // 13: statements : /* empty */
-        case 13:
-            return new BlockNode({});
-
-        // 14: statements : statements statement
-        case 14: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 1);
-            BlockNode* left = dynamic_cast<BlockNode*>(rhs[0].node);
-            std::vector<ASTNode*> items;
-            if (left) {
-                items = std::move(left->stmts);
-                delete left;
-            }
-            if (rhs[1].node) items.push_back(rhs[1].node);
-            return new BlockNode(std::move(items));
-        }
-
-        // 15: statement : expr SEMICOLON
-        case 15:
-            CHECK_RHS_IDX(pid, 0);
-            return new ExprStmtNode(rhs[0].node);
-
-        // 16: statement : block
-        case 16:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
-
-        // 17: block : L_CURL_BRACK statements R_CURL_BRACK
-        case 17: {
-            CHECK_RHS_IDX(pid, 1);
-            BlockNode* b = dynamic_cast<BlockNode*>(rhs[1].node);
-            if (b) {
+        // ========== Statements and blocks ==========
+        case 13: EMPTY_BLOCK();                               // statements : /* empty */
+        case 14: BUILD_BLOCK(RHS(0), RHS(1));                // statements : statements statement
+        case 15: return new ExprStmtNode(RHS(0));            // statement : expr SEMICOLON
+        case 16: PASS();                                      // statement : block
+        case 17: { // block : L_CURL_BRACK statements R_CURL_BRACK
+            if (auto* b = dynamic_cast<BlockNode*>(RHS(1))) {
                 auto v = std::move(b->stmts);
                 delete b;
                 return new BlockNode(std::move(v));
             } else {
-                std::vector<ASTNode*> v;
-                if (rhs[1].node) v.push_back(rhs[1].node);
-                return new BlockNode(std::move(v));
+                return new BlockNode(RHS(1) ? std::vector{RHS(1)} : std::vector<ASTNode*>{});
             }
         }
 
-        // 18: expr -> relational
-        case 18:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
+        // ========== Expression forwarding ==========
+        case 18: // expr -> relational
+        case 19: // expr -> let_expr
+        case 20: // expr -> if_expr
+        case 21: // expr -> call_expr
+        case 22: // relational -> concatenation
+        case 28: // concatenation -> additive
+        case 30: // additive -> multiplicative
+        case 33: // multiplicative -> unary
+        case 38: // unary -> primary
+            PASS();
 
-        // 19: expr -> let_expr
-        case 19:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
+        // ========== Binary operators ==========
+        case 23: BIN_OP("<");   // concatenation LESS_THAN concatenation
+        case 24: BIN_OP(">");
+        case 25: BIN_OP("<=");
+        case 26: BIN_OP(">=");
+        case 27: BIN_OP("==");
+        case 29: BIN_OP("@");   // concatenation CONCAT additive
+        case 31: BIN_OP("+");   // additive PLUS multiplicative
+        case 32: BIN_OP("-");
+        case 34: BIN_OP("*");   // multiplicative STAR unary
+        case 35: BIN_OP("/");
 
-        // 20: expr -> if_expr
-        case 20:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
+        // ========== Unary operators ==========
+        case 36: UNARY_OP("-");
+        case 37: UNARY_OP("+");
 
-        // 21: expr -> call_expr
-        case 21:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
-
-        // 22: relational -> concatenation
-        case 22:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
-
-        // 23: relational -> concatenation LESS_THAN concatenation
-        case 23: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            return new BinaryOpNode("<", rhs[0].node, rhs[2].node);
-        }
-
-        // 24: relational -> concatenation GREATER_THAN concatenation
-        case 24: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            return new BinaryOpNode(">", rhs[0].node, rhs[2].node);
-        }
-
-        // 25: relational -> concatenation LESS_EQUALS concatenation
-        case 25: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            return new BinaryOpNode("<=", rhs[0].node, rhs[2].node);
-        }
-
-        // 26: relational -> concatenation GREATER_EQUALS concatenation
-        case 26: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            return new BinaryOpNode(">=", rhs[0].node, rhs[2].node);
-        }
-
-        // 27: relational -> concatenation EQUALITY concatenation
-        case 27: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            return new BinaryOpNode("==", rhs[0].node, rhs[2].node);
-        }
-
-        // 28: concatenation -> additive
-        case 28:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
-
-        // 29: concatenation -> concatenation CONCAT additive
-        case 29: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            return new BinaryOpNode("@", rhs[0].node, rhs[2].node);
-        }
-
-        // 30: additive -> multiplicative
-        case 30:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
-
-        // 31: additive -> additive PLUS multiplicative
-        case 31: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            return new BinaryOpNode("+", rhs[0].node, rhs[2].node);
-        }
-
-        // 32: additive -> additive MINUS multiplicative
-        case 32: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            return new BinaryOpNode("-", rhs[0].node, rhs[2].node);
-        }
-
-        // 33: multiplicative -> unary
-        case 33:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
-
-        // 34: multiplicative -> multiplicative STAR unary
-        case 34: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            return new BinaryOpNode("*", rhs[0].node, rhs[2].node);
-        }
-
-        // 35: multiplicative -> multiplicative SLASH unary
-        case 35: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            return new BinaryOpNode("/", rhs[0].node, rhs[2].node);
-        }
-
-        // 36: unary -> MINUS unary
-        case 36: {
-            CHECK_RHS_IDX(pid, 1);
-            return new UnaryOpNode("-", rhs[1].node);
-        }
-
-        // 37: unary -> PLUS unary
-        case 37: {
-            CHECK_RHS_IDX(pid, 1);
-            return new UnaryOpNode("+", rhs[1].node);
-        }
-
-        // 38: unary -> primary
-        case 38:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
-
-        // 39: primary -> NUMBER
-        case 39: {
-            CHECK_RHS_IDX(pid, 0);
+        // ========== Primaries ==========
+        case 39: { // NUMBER
             long long v = parse_int(rhs[0].token_text);
             return new NumberNode(v);
         }
-
-        // 40: primary -> STRING
-        case 40: {
-            CHECK_RHS_IDX(pid, 0);
-            std::string s = rhs[0].token_text.value_or("");
-            // Quitar comillas si existen (depende del lexer)
+        case 40: { // STRING
+            std::string s = TOKEN(0);
             if (s.size() >= 2 && s.front() == '"' && s.back() == '"')
                 s = s.substr(1, s.size() - 2);
             return new StringNode(s);
         }
+        case 41: // IDENTIFIER
+            return new VariableNode(TOKEN(0));
+        case 42: // L_PAREN expr R_PAREN
+            return RHS(1);
 
-        // 41: primary -> IDENTIFIER
-        case 41: {
-            CHECK_RHS_IDX(pid, 0);
-            std::string name = rhs[0].token_text.value_or("");
-            return new VariableNode(name);
+        // ========== Let expression ==========
+        case 43: // LET IDENTIFIER EQUAL expr IN expr
+            return new LetNode(TOKEN(1), RHS(3), RHS(5));
+
+        // ========== If expression ==========
+        case 44: // IF L_PAREN expr R_PAREN expr ELSE expr
+            return new IfNode(RHS(2), RHS(4), RHS(6));
+
+        // ========== Function call ==========
+        case 45: { // IDENTIFIER L_PAREN arg_list_opt R_PAREN
+            std::string name = TOKEN(0);
+            BUILD_ARG_LIST(RHS(2));
         }
 
-        // 42: primary -> L_PAREN expr R_PAREN
-        case 42:
-            CHECK_RHS_IDX(pid, 1);
-            return rhs[1].node;
+        // ========== Argument lists ==========
+        case 46: // arg_list_opt : /* empty */
+            EMPTY_BLOCK();
+        case 47: // arg_list_opt : arg_list
+            PASS();
+        case 48: // arg_list -> expr
+            BUILD_ARG_LIST(RHS(0));
+        case 49: // arg_list -> arg_list COMMA expr
+            BUILD_BLOCK(RHS(0), RHS(2));
 
-        // 43: let_expr -> LET IDENTIFIER EQUAL expr IN expr
-        case 43: {
-            CHECK_RHS_IDX(pid, 1);
-            CHECK_RHS_IDX(pid, 3);
-            CHECK_RHS_IDX(pid, 5);
-            std::string name = rhs[1].token_text.value_or("");
-            ASTNode* init = rhs[3].node;
-            ASTNode* body = rhs[5].node;
-            return new LetNode(name, init, body);
-        }
-
-        // 44: if_expr -> IF L_PAREN expr R_PAREN expr ELSE expr
-        case 44: {
-            CHECK_RHS_IDX(pid, 2);
-            CHECK_RHS_IDX(pid, 4);
-            CHECK_RHS_IDX(pid, 6);
-            ASTNode* cond = rhs[2].node;
-            ASTNode* then_branch = rhs[4].node;
-            ASTNode* else_branch = rhs[6].node;
-            return new IfNode(cond, then_branch, else_branch);
-        }
-
-        // 45: call_expr -> IDENTIFIER L_PAREN arg_list_opt R_PAREN
-        case 45: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            std::string name = rhs[0].token_text.value_or("");
-            BlockNode* argBlock = dynamic_cast<BlockNode*>(rhs[2].node);
-            std::vector<ASTNode*> args;
-            if (argBlock) {
-                args = std::move(argBlock->stmts);
-                delete argBlock;
-            }
-            return new FunctionCallNode(name, std::move(args));
-        }
-
-        // 46: arg_list_opt : /* empty */
-        case 46:
-            return new BlockNode({});
-
-        // 47: arg_list_opt : arg_list
-        case 47:
-            CHECK_RHS_IDX(pid, 0);
-            return rhs[0].node;
-
-        // 48: arg_list -> expr
-        case 48: {
-            CHECK_RHS_IDX(pid, 0);
-            std::vector<ASTNode*> v;
-            v.push_back(rhs[0].node);
-            return new BlockNode(std::move(v));
-        }
-
-        // 49: arg_list -> arg_list COMMA expr
-        case 49: {
-            CHECK_RHS_IDX(pid, 0);
-            CHECK_RHS_IDX(pid, 2);
-            BlockNode* left = dynamic_cast<BlockNode*>(rhs[0].node);
-            std::vector<ASTNode*> items;
-            if (left) {
-                items = std::move(left->stmts);
-                delete left;
-            }
-            items.push_back(rhs[2].node);
-            return new BlockNode(std::move(items));
-        }
-
-        // 50: program' -> program
-        case 50:
-            return nullptr;
+        // ========== Dummy production (program') ==========
+        case 50: // program' -> program
+            return RHS(0); 
 
         default:
-            std::cerr << "ASTBuilder: producción no manejada: " << pid << "\n";
+            std::cerr << "ASTBuilder: unhandled production " << pid << "\n";
             return nullptr;
     }
 }
