@@ -1,5 +1,8 @@
 CXX = g++
-CXXFLAGS = -Iinclude -std=c++17
+CXXFLAGS = -Iinclude -std=c++17 $(shell llvm-config --cxxflags)
+
+LDFLAGS = $(shell llvm-config --ldflags)
+LDLIBS = $(shell llvm-config --libs core)
 
 SRCS = \
     ../parser/AST_Builder/ast_builder.cpp \
@@ -15,17 +18,19 @@ SRCS = \
     ../lexer/Lexer_Generator/preprocessor.cpp \
     ../semantic/analyzer.cpp \
     ../semantic/type_inference_visitor.cpp \
-    ../ir_generator/ir_generator.cpp \
+    ../ir_generator/llvm_ir_generator.cpp \
+    ../ir_generator/llvm_ir_executor.cpp \
     ../semantic/dependency_graph.cpp \
-    pipeline_test.cpp \
+    pipeline_test.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 TARGET = test
 
 all: $(TARGET)
 
+# Regla de enlace: añade LDFLAGS y LDLIBS
 $(TARGET): $(OBJS)
-	$(CXX) $^ -o $@
+	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 clean:
 	rm -f $(OBJS) $(TARGET)

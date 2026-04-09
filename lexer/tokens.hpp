@@ -27,6 +27,7 @@ enum class TokenType : int {
     TOKEN_SEMICOLON,
     TOKEN_COMMA,
     TOKEN_EQUALITY,
+    TOKEN_NOT_EQUAL,
     TOKEN_EQUAL,
     TOKEN_LESS_THAN,
     TOKEN_GREATER_THAN,
@@ -83,6 +84,7 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_IF:           return "IF";
         case TokenType::TOKEN_ELSE:         return "ELSE";
         case TokenType::TOKEN_EQUALITY:     return "EQUALITY";
+        case TokenType::TOKEN_NOT_EQUAL:        return "EQUAL";
         case TokenType::TOKEN_EQUAL:        return "EQUAL";
         case TokenType::TOKEN_LESS_THAN:    return "LESS_THAN";
         case TokenType::TOKEN_GREATER_THAN: return "GREATER_THAN";
@@ -135,6 +137,7 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_SEMICOLON, ";", false },
         { TokenType::TOKEN_COMMA,    ",", false },
         { TokenType::TOKEN_EQUALITY,    "==",  false },
+        { TokenType::TOKEN_NOT_EQUAL,    "!=",  false },
         { TokenType::TOKEN_EQUAL,    "=",  false },
         { TokenType::TOKEN_COLON, ":", false },
         // Identifiers

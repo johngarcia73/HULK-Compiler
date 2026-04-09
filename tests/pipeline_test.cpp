@@ -8,32 +8,32 @@
 #include "../lexer/lexer.hpp"  
 #include "../semantic/analyzer.hpp"   
 #include "../semantic/type_inference_visitor.hpp"   
-#include "../ir_generator/ir_generator.hpp"
+#include "../ir_generator/llvm_ir_generator.hpp"
+#include "../ir_generator/llvm_ir_executor.hpp"
+
 
 #include <string>
 #include <iostream>
 #include <memory>
 #include <vector>
-#include <string>
 #include <unordered_map>
 #include <fstream>
 #include <sstream>
+#include <cstdlib>  //for system()
 
 std::string grammar_dir = "../parser/Parser_Generator/grammar.y";
 std::string program_dir = "program.hulk";
-
 
 int main()
 {
     try
     {
-        std::cout << "\n=== FULL PIPELINE TEST (Lexer + Parser + AST) ===\n\n";
+        std::cout << "\n=== FULL PIPELINE TEST (Lexer + Parser + AST + LLVM IR) ===\n\n";
 
         // ------------------------------------------------------------
-        // 1. Load grammar from file (grammar_small.y)
+        // 1. Load grammar from file
         // ------------------------------------------------------------
         Grammar grammar = build_grammar_from_file(grammar_dir);
-
         std::cout << "Grammar loaded\n";
         std::cout << "Symbols: " << grammar.symtab.size() << "\n";
         std::cout << "Productions: " << grammar.get_productions().size() << "\n\n";
@@ -60,16 +60,16 @@ int main()
         parser.set_builder(std::make_unique<ASTBuilder>());
 
         // ------------------------------------------------------------
-        // 5. Lexer setup (using default token specifications)
+        // 5. Lexer setup
         // ------------------------------------------------------------
         auto token_specs = default_token_specs();
         Lexer lexer(token_specs);
 
-        // Input program (must match grammar.y)
+        // Input program
         std::string input;
         std::ifstream file(program_dir);
         if (!file.is_open()) {
-            std::cerr << "Error: Couldnt open test program\n";
+            std::cerr << "Error: Could not open test program\n";
             return 1;
         }
         std::stringstream buffer;
@@ -80,7 +80,7 @@ int main()
         std::cout << "Input program:\n" << input << "\n";
 
         // ------------------------------------------------------------
-        // 6. Tokenize input with lexer
+        // 6. Tokenize input
         // ------------------------------------------------------------
         std::vector<Token> raw_tokens = lexer.tokenize(input);
 
@@ -89,7 +89,6 @@ int main()
         // ------------------------------------------------------------
         std::vector<Token> tokens;
         for (auto& t : raw_tokens) {
-            // t.symbol_id is the TokenType enum value; convert to name
             std::string token_name = token_type_to_string(static_cast<TokenType>(t.symbol_id));
             auto it = name_to_id.find(token_name);
             if (it == name_to_id.end()) {
@@ -100,21 +99,17 @@ int main()
             uint32_t id = it->second;
             tokens.emplace_back(id, t.value, t.line, t.column);
         }
-
-        // Add EOF token manually (since lexer may not generate it)
         tokens.emplace_back(name_to_id["$"], "$", 0, 0);
 
         // ------------------------------------------------------------
         // 8. Parse tokens
         // ------------------------------------------------------------
         std::cout << "Parsing...\n";
-
         std::cout << "Tokens from lexer:\n";
         for (auto& t : tokens) {
             std::cout << "  " << t.value << " -> sym=" << t.symbol_id << "\n";
         }
         ParseResult result = parser.parse(tokens);
-        
         
         if (result.ast) {
             ProgramNode* program = dynamic_cast<ProgramNode*>(result.ast.get());
@@ -123,14 +118,12 @@ int main()
                 return 1;
             }
             std::cerr << "ProgramNode address: " << program << "\n";
-
             program->test(); 
 
-            // Create the symbols table
+            // Semantic analysis
             SemanticSymbolTable symTable;
             symTable.enterScope();
 
-            // Type inference (annotates AST)
             DependencyGraph graph;
             TypeInferenceVisitor inferencer(symTable, graph);
             inferencer.infer(program);
@@ -142,18 +135,30 @@ int main()
                 return 1;
             } else {
                 std::cout << "✓ Semantic analysis successful.\n";
-                // Mostrar el grafo de dependencias (opcional)
                 graph.topologicalSort();
                 graph.dump();
             }
 
+            // ------------------------------------------------------------
+            // 9. Generate LLVM IR (instead of BANNER)
+            // ------------------------------------------------------------
+            LLVMIRGenerator llvmGen;
+            if (!llvmGen.generate(program)) {
+                std::cerr << "LLVM IR generation failed.\n";
+                return 1;
+            }
 
-            // Banner IR generation
-            IRGenerator irGen;
-            std::string bannerIR = irGen.generate(program);
-            std::cout << "\n=== Generated BANNER IR ===\n\n";
-            std::cout << bannerIR << "\n";
+            LLVMExecutor executor;
 
+            // Option 1: just generate .ll file
+            executor.generateIRToFile(program, "output.ll");
+
+            // Option 2: compile and run, and get the exit code
+            int exitCode = executor.compileAndRun(program, "output.ll", "program");
+            if (exitCode >= 0) {
+                std::cout << "Program exited with code " << exitCode << "\n";
+            }
+            
 
         } else {
             std::cout << "✗ No AST to analyze.\n";
@@ -161,7 +166,7 @@ int main()
         }
         
         // ------------------------------------------------------------
-        // 9. Show result
+        // 10. Show parse result
         // ------------------------------------------------------------
         if (!result.is_success()) {
             std::cout << "✗ Parse failed\n";
@@ -170,17 +175,14 @@ int main()
         }
 
         std::cout << "✓ Parse succeeded\n";
-
         std::cout << "Reductions:";
         for (auto r : result.reduction_sequence)
             std::cout << " P" << r;
         std::cout << "\n";
 
-        // ------------------------------------------------------------
-        // 10. Print AST
-        // ------------------------------------------------------------
+        // Print AST (optional)
         if (result.ast) {
-            std::cout << "✓ AST succesfully built\n";
+            std::cout << "✓ AST successfully built\n";
             std::cout << "\nAST:\n";
             result.ast->print(std::cout);
         } else {
@@ -188,9 +190,6 @@ int main()
         }
 
         std::cout << "\n";
-
-        
-        
         return 0;
     }
     catch (const std::exception &e) {

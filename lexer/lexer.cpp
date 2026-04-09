@@ -45,8 +45,6 @@ std::vector<Token> Lexer::tokenize(const std::string& input) {
         while (i < length) {
 
             char c = stripped_input[i];
-
-            std::cout<<"Char: "<< int(c)<< "\n";
             
             if (!dfa.transitions.count(state) ||
                 !dfa.transitions.at(state).count(c))
