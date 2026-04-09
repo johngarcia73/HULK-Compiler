@@ -182,9 +182,14 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             return new IfNode(RHS(2), RHS(4), RHS(6));
 
         // ========== Function call ==========
-        case 45: { // IDENTIFIER L_PAREN arg_list_opt R_PAREN
+        case 45: {
             std::string name = TOKEN(0);
-            BUILD_ARG_LIST(RHS(2));
+            std::vector<ASTNode*> args;
+            if (auto* argBlock = dynamic_cast<BlockNode*>(RHS(2))) {
+                args = std::move(argBlock->stmts);
+                delete argBlock;
+            } else if (RHS(2)) args.push_back(RHS(2));
+            return new FunctionCallNode(name, std::move(args));
         }
 
         // ========== Argument lists ==========
