@@ -8,12 +8,13 @@ class SemanticAnalyzer : public Visitor {
     SemanticSymbolTable& symTable;
     std::vector<std::string> errors;
 
+    void registerBuiltinFunctions();
     void error(const std::string& msg) { errors.push_back(msg); }
-    void reportErrors() const;
 
 public:
     SemanticAnalyzer(SemanticSymbolTable& table) : symTable(table) {}
 
+    void reportErrors() const;
     void analyze(ProgramNode* root);
     bool hasErrors() const { return !errors.empty(); }
     const std::vector<std::string>& getErrors() const { return errors; }

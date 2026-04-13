@@ -17,6 +17,7 @@
 %token EQUAL
 %token EOF 0
 %token COLON
+%token ARROW "=>"
 
 %start program
 
@@ -36,7 +37,9 @@ declaration : function_decl
 
 function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN block
               | FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type block
-
+              | FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN ARROW expr SEMICOLON
+              | FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type ARROW expr SEMICOLON
+              
 param_list_opt : /* empty */
                | param_list
 

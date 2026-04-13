@@ -1,8 +1,48 @@
 #include "visitor.hpp"
 #include "analyzer.hpp"
+#include "dependency_graph.hpp"
+#include "type_inference_visitor.hpp"
 #include <iostream>
 
+
+void SemanticAnalyzer::registerBuiltinFunctions() {
+
+    std::cerr << "DEBUG: registerBuiltinFunctions() called\n";
+    
+
+    // Ensure theres a global scope 
+    if (symTable.getCurrentLevel() == 0 && !symTable.getCurrentLevel())
+        symTable.enterScope();
+
+    // Math (Number -> Number)
+    auto mathType = new FunctionType({NumberType::instance()}, NumberType::instance());
+    symTable.insert("sin", {"sin", mathType, SemanticSymbolKind::Function, 0});
+    symTable.insert("cos", {"cos", mathType, SemanticSymbolKind::Function, 0});
+    symTable.insert("tan", {"tan", mathType, SemanticSymbolKind::Function, 0});
+    symTable.insert("abs", {"abs", mathType, SemanticSymbolKind::Function, 0});
+    symTable.insert("sqrt", {"sqrt", mathType, SemanticSymbolKind::Function, 0});
+
+    // input() -> String
+    auto inputType = new FunctionType({}, StringType::instance());
+    symTable.insert("input", {"input", inputType, SemanticSymbolKind::Function, 0});
+
+    // _concat(String, String) -> String
+    auto concatType = new FunctionType({StringType::instance(), StringType::instance()},
+                                       StringType::instance());
+    symTable.insert("_concat", {"_concat", concatType, SemanticSymbolKind::Function, 0});
+
+    // print (overwritten)
+
+    std::cerr << "DEBUG: built-ins registered\n";
+}
+
 void SemanticAnalyzer::analyze(ProgramNode* root) {
+    registerBuiltinFunctions(); // First populate the symtab wth built-ins
+
+    DependencyGraph graph;
+    TypeInferenceVisitor inferencer(symTable, graph);
+    inferencer.infer(root);
+
     root->accept(*this);
     reportErrors();
 }
@@ -30,6 +70,52 @@ Type* SemanticAnalyzer::visit(BlockNode& node) {
 }
 
 Type* SemanticAnalyzer::visit(FunctionDeclNode& node) {
+    
+    // Verify builtins redeclaration
+    SymbolInfo* existing = symTable.lookup(node.name);
+    if (existing && existing->scopeLevel == 0 && existing->kind == SemanticSymbolKind::Function) {
+        error("Cannot redeclare built-in function '" + node.name + "'");
+        return nullptr;
+    }
+
+    // If inline, return type can be inferred from expression
+    if (node.isInline) {
+        if (node.body != nullptr) {
+            error("Inline function cannot have a block body");
+            return nullptr;
+        }
+        // Inferr exression type
+        if (!node.exprBody->type) {
+            error("Cannot infer return type of inline function '" + node.name + "'");
+            return nullptr;
+        }
+        Type* inferredType = node.exprBody->type;
+        if (node.returnType != nullptr && !node.returnType->equals(inferredType)) {
+            error("Return type mismatch in inline function '" + node.name + "'");
+            return nullptr;
+        }
+
+        node.returnType = inferredType;
+        // Insert function
+        SymbolInfo funcInfo{node.name, new FunctionType(node.paramTypes, node.returnType),
+                            SemanticSymbolKind::Function, symTable.getCurrentLevel()};
+        if (!symTable.insert(node.name, funcInfo)) {
+            error("Function '" + node.name + "' already declared in this scope");
+        }
+        //Must  enter in a scope for the parameters
+        symTable.enterScope();
+        for (size_t i = 0; i < node.params.size(); ++i) {
+            SymbolInfo paramInfo{node.params[i], node.paramTypes[i],
+                                 SemanticSymbolKind::Parameter, symTable.getCurrentLevel()};
+            symTable.insert(node.params[i], paramInfo);
+        }
+        // Visit expression to check variables are defined
+        node.exprBody->accept(*this);
+        symTable.exitScope();
+        return nullptr;
+    }
+    
+    // Not inline case
     // Verify function is already in the table
     SymbolInfo* info = symTable.lookup(node.name);
     if (!info || info->kind != SemanticSymbolKind::Function) {
@@ -101,6 +187,23 @@ Type* SemanticAnalyzer::visit(IfNode& node) {
 }
 
 Type* SemanticAnalyzer::visit(FunctionCallNode& node) {
+
+    // Special case for print
+    if (node.name == "print") {
+        if (node.args.size() != 1) {
+            error("print expects exactly one argument");
+            return nullptr;
+        }
+        Type* argType = node.args[0]->type;
+        if (!argType->equals(NumberType::instance()) && !argType->equals(StringType::instance())) {
+            error("print argument must be Number or String");
+            return nullptr;
+        }
+        // Doesnt return useful value, but the type of the call is  Void
+        return VoidType::instance();
+    }
+
+
     SymbolInfo* funcInfo = symTable.lookup(node.name);
     if (!funcInfo || funcInfo->kind != SemanticSymbolKind::Function) {
         error("Function '" + node.name + "' not declared.");

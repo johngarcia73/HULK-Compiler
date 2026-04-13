@@ -195,13 +195,22 @@ Type* ParamListNode::accept(Visitor& v) {
 // ------------------------------------------------------------
 // FunctionDeclNode
 // ------------------------------------------------------------
-FunctionDeclNode::FunctionDeclNode(std::string n, std::vector<std::string> p,
-                                   std::vector<Type*> pt, Type* rt, ASTNodePtr b)
-    : name(std::move(n)), params(std::move(p)), paramTypes(std::move(pt)), returnType(rt), body(b) {}
+FunctionDeclNode::FunctionDeclNode(std::string n, std::vector<std::string> p, std::vector<Type*> pt,
+                     Type* rt, ASTNodePtr b)
+        : name(std::move(n)), params(std::move(p)), paramTypes(std::move(pt)),
+          returnType(rt), body(b), isInline(false), exprBody(nullptr) {}
+
+
+FunctionDeclNode::FunctionDeclNode(std::string n, std::vector<std::string> p, std::vector<Type*> pt,
+                     Type* rt, ASTNodePtr eBody, bool inlineFlag)
+        : name(std::move(n)), params(std::move(p)), paramTypes(std::move(pt)),
+          returnType(rt), body(nullptr), isInline(inlineFlag), exprBody(eBody) {}
+
 
 FunctionDeclNode::~FunctionDeclNode() {
     delete body;
 }
+
 
 void FunctionDeclNode::print(std::ostream& o, int indent_n) const {
     indent(o, indent_n);
