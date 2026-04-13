@@ -55,13 +55,13 @@ public:
         return s;
     }
     bool equals(const Type* other) const override {
-        auto* ft = dynamic_cast<const FunctionType*>(other);
-        if (!ft) return false;
-        if (paramTypes.size() != ft->paramTypes.size()) return false;
+        auto* otherFunc = dynamic_cast<const FunctionType*>(other);
+        if (!otherFunc) return false;
+        if (paramTypes.size() != otherFunc->paramTypes.size()) return false;
         for (size_t i = 0; i < paramTypes.size(); ++i) {
-            if (!paramTypes[i]->equals(ft->paramTypes[i])) return false;
+            if (!paramTypes[i]->equals(otherFunc->paramTypes[i])) return false;
         }
-        return returnType->equals(ft->returnType);
+        return returnType->equals(otherFunc->returnType);
     }
     const std::vector<Type*>& getParamTypes() const { return paramTypes; }
     Type* getReturnType() const { return returnType; }

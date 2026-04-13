@@ -16,12 +16,23 @@ enum class SemanticSymbolKind {
 
 struct SymbolInfo {
     std::string name;
-    Type* type;
+    std::vector<FunctionType*> overloads;  // just functions
+    Type* type;                            // variables/params and not overladed funcs
     SemanticSymbolKind kind;
     int scopeLevel;
-    // For functions: is already in type (FunctionType)
-    // For future extenions: visibility, const, virtual, offset, etc.
     bool isConst = false;
+
+    // Constructor for vars and params (not functions)
+    SymbolInfo(const std::string& n, Type* t, SemanticSymbolKind k, int level)
+        : name(n), type(t), kind(k), scopeLevel(level) {}
+
+    // Constructor for functions (not overloaded)
+    SymbolInfo(const std::string& n, FunctionType* ft, SemanticSymbolKind k, int level)
+        : name(n), overloads{ft}, type(ft), kind(k), scopeLevel(level) {}
+
+    // Constructor for overloaded functions
+    SymbolInfo(const std::string& n, const std::vector<FunctionType*>& ov, SemanticSymbolKind k, int level)
+        : name(n), overloads(ov), type(ov.empty() ? nullptr : ov[0]), kind(k), scopeLevel(level) {}
 };
 
 class SemanticSymbolTable {
@@ -39,11 +50,29 @@ public:
     int getCurrentLevel() const { return currentLevel; }
 
     bool insert(const std::string& name, const SymbolInfo& info) {
-        // Verify it doesnt exist in curret scope
+        if (scopes.empty()) scopes.emplace_back();
         auto& cur = scopes.back();
-        if (cur.find(name) != cur.end()) return false;
-        cur[name] = info;
-        return true;
+        auto result = cur.emplace(name, info);
+        return result.second; 
+    }
+
+    bool insertFunction(const std::string& name, FunctionType* funcType) {
+        if (scopes.empty()) scopes.emplace_back();
+        auto& cur = scopes.back();
+        auto it = cur.find(name);
+        if (it != cur.end()) {
+            SymbolInfo& existing = it->second;
+            if (existing.kind != SemanticSymbolKind::Function) return false;
+         
+            for (auto* ft : existing.overloads) {
+                if (ft->equals(funcType)) return false;
+            }
+            existing.overloads.push_back(funcType);
+            return true;
+        } else {
+            cur.emplace(name, SymbolInfo(name, funcType, SemanticSymbolKind::Function, currentLevel));
+            return true;
+        }
     }
 
     SymbolInfo* lookup(const std::string& name) {
@@ -77,10 +106,36 @@ public:
         for (size_t i = 0; i < scopes.size(); ++i) {
             std::cout << "  Scope " << i << ":\n";
             for (const auto& [name, info] : scopes[i]) {
-                std::cout << "    " << name << " : " << info.type->toString()
-                        << " (kind=" << static_cast<int>(info.kind) << ")\n";
+                std::cout << "    " << name << " : ";
+                if (info.kind == SemanticSymbolKind::Function && info.overloads.size() > 1) {
+                    for (auto* ft : info.overloads) {
+                        std::cout << ft->toString() << " ";
+                    }
+                } else if (info.type) {
+                    std::cout << info.type->toString();
+                } else {
+                    std::cout << "unknown";
+                }
+                std::cout << " (kind=" << static_cast<int>(info.kind) << ")\n";
             }
         }
     }
 
+    FunctionType* lookupFunction(const std::string& name, const std::vector<Type*>& argTypes) {
+        SymbolInfo* info = lookup(name); 
+        if (!info || info->kind != SemanticSymbolKind::Function) return nullptr;
+        for (auto* ft : info->overloads) {
+            const auto& params = ft->getParamTypes();
+            if (params.size() != argTypes.size()) continue;
+            bool match = true;
+            for (size_t i = 0; i < params.size(); ++i) {
+                if (!params[i]->equals(argTypes[i])) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return ft;
+        }
+        return nullptr;
+    }
 };

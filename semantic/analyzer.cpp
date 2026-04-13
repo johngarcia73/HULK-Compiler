@@ -31,7 +31,15 @@ void SemanticAnalyzer::registerBuiltinFunctions() {
                                        StringType::instance());
     symTable.insert("_concat", {"_concat", concatType, SemanticSymbolKind::Function, 0});
 
-    // print (overwritten)
+    // print (overloads)
+    std::vector<FunctionType*> printOverloads;
+    // print(Number)
+    printOverloads.push_back(new FunctionType({NumberType::instance()}, VoidType::instance()));
+    // print(String)
+    printOverloads.push_back(new FunctionType({StringType::instance()}, VoidType::instance()));
+
+    SymbolInfo printInfo("print", printOverloads, SemanticSymbolKind::Function, 0);
+    symTable.insert("print", printInfo);
 
     std::cerr << "DEBUG: built-ins registered\n";
 }
@@ -70,85 +78,31 @@ Type* SemanticAnalyzer::visit(BlockNode& node) {
 }
 
 Type* SemanticAnalyzer::visit(FunctionDeclNode& node) {
-    
-    // Verify builtins redeclaration
     SymbolInfo* existing = symTable.lookup(node.name);
     if (existing && existing->scopeLevel == 0 && existing->kind == SemanticSymbolKind::Function) {
         error("Cannot redeclare built-in function '" + node.name + "'");
         return nullptr;
     }
 
-    // If inline, return type can be inferred from expression
-    if (node.isInline) {
-        if (node.body != nullptr) {
-            error("Inline function cannot have a block body");
-            return nullptr;
-        }
-        // Inferr exression type
-        if (!node.exprBody->type) {
-            error("Cannot infer return type of inline function '" + node.name + "'");
-            return nullptr;
-        }
-        Type* inferredType = node.exprBody->type;
-        if (node.returnType != nullptr && !node.returnType->equals(inferredType)) {
-            error("Return type mismatch in inline function '" + node.name + "'");
-            return nullptr;
-        }
+    FunctionType* funcType = new FunctionType(node.paramTypes, node.returnType);
 
-        node.returnType = inferredType;
-        // Insert function
-        SymbolInfo funcInfo{node.name, new FunctionType(node.paramTypes, node.returnType),
-                            SemanticSymbolKind::Function, symTable.getCurrentLevel()};
-        if (!symTable.insert(node.name, funcInfo)) {
-            error("Function '" + node.name + "' already declared in this scope");
-        }
-        //Must  enter in a scope for the parameters
-        symTable.enterScope();
-        for (size_t i = 0; i < node.params.size(); ++i) {
-            SymbolInfo paramInfo{node.params[i], node.paramTypes[i],
-                                 SemanticSymbolKind::Parameter, symTable.getCurrentLevel()};
-            symTable.insert(node.params[i], paramInfo);
-        }
-        // Visit expression to check variables are defined
-        node.exprBody->accept(*this);
-        symTable.exitScope();
+    if (!symTable.insertFunction(node.name, funcType)) {
+        error("Function '" + node.name + "' with same signature already declared in this scope");
         return nullptr;
     }
-    
-    // Not inline case
-    // Verify function is already in the table
-    SymbolInfo* info = symTable.lookup(node.name);
-    if (!info || info->kind != SemanticSymbolKind::Function) {
-        error("Función '" + node.name + "' no encontrada en tabla.");
-        return nullptr;
-    }
-    FunctionType* funcType = dynamic_cast<FunctionType*>(info->type);
-    if (!funcType) {
-        error("Tipo incorrecto para función '" + node.name + "'.");
-        return nullptr;
-    }
-    // Check params number
-    if (node.params.size() != funcType->getParamTypes().size()) {
-        error("Declaración de función '" + node.name +
-              "' tiene número incorrecto de parámetros.");
-        return nullptr;
-    }
-    // Function scope
+
     symTable.enterScope();
-    // Insert parameters and their already inferred types
     for (size_t i = 0; i < node.params.size(); ++i) {
-        SymbolInfo paramInfo;
-        paramInfo.name = node.params[i];
-        paramInfo.type = funcType->getParamTypes()[i];
-        paramInfo.kind = SemanticSymbolKind::Parameter;
-        paramInfo.scopeLevel = symTable.getCurrentLevel();
+        SymbolInfo paramInfo(node.params[i], node.paramTypes[i],
+                             SemanticSymbolKind::Parameter, symTable.getCurrentLevel());
         if (!symTable.insert(node.params[i], paramInfo)) {
-            error("Parámetro duplicado: " + node.params[i]);
+            error("Duplicate parameter: " + node.params[i]);
         }
     }
-    // Check body
+    // Analyze body
     node.body->accept(*this);
     symTable.exitScope();
+
     return nullptr;
 }
 
@@ -187,49 +141,23 @@ Type* SemanticAnalyzer::visit(IfNode& node) {
 }
 
 Type* SemanticAnalyzer::visit(FunctionCallNode& node) {
-
-    // Special case for print
-    if (node.name == "print") {
-        if (node.args.size() != 1) {
-            error("print expects exactly one argument");
+    std::vector<Type*> argTypes;
+    for (auto* arg : node.args) {
+        if (!arg->type) {
+            error("Argument has no type");
             return nullptr;
         }
-        Type* argType = node.args[0]->type;
-        if (!argType->equals(NumberType::instance()) && !argType->equals(StringType::instance())) {
-            error("print argument must be Number or String");
-            return nullptr;
-        }
-        // Doesnt return useful value, but the type of the call is  Void
-        return VoidType::instance();
+        argTypes.push_back(arg->type);
     }
-
-
-    SymbolInfo* funcInfo = symTable.lookup(node.name);
-    if (!funcInfo || funcInfo->kind != SemanticSymbolKind::Function) {
-        error("Function '" + node.name + "' not declared.");
-        return nullptr;
-    }
-    FunctionType* funcType = dynamic_cast<FunctionType*>(funcInfo->type);
+    FunctionType* funcType = symTable.lookupFunction(node.name, argTypes);
     if (!funcType) {
-        error("Wrong type for function '" + node.name + "'.");
+        error("No matching function for '" + node.name + "'");
         return nullptr;
     }
-    if (node.args.size() != funcType->getParamTypes().size()) {
-        error("Wrong params numbers for '" + node.name +
-              "'. Waited " + std::to_string(funcType->getParamTypes().size()) +
-              ", got " + std::to_string(node.args.size()));
-        return nullptr;
-    }
-    for (size_t i = 0; i < node.args.size(); ++i) {
-        Type* argType = node.args[i]->type;
-        if (!argType->equals(funcType->getParamTypes()[i])) {
-            error("Argument " + std::to_string(i+1) + " de '" + node.name +
-                  "' Waited type " + funcType->getParamTypes()[i]->toString() +
-                  ", but got " + argType->toString());
-        }
-    }
-    return nullptr;
+    node.type = funcType->getReturnType();
+    return node.type;
 }
+
 
 Type* SemanticAnalyzer::visit(VariableNode& node) {
     // Variable must b in table (already verified at inference)

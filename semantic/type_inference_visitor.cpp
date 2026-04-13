@@ -68,7 +68,7 @@ Type* TypeInferenceVisitor::visit(FunctionDeclNode& node) {
     if (collecting) {
         // Register the function in the symbol table
         Type* retType = node.returnType ? node.returnType : VoidType::instance();
-        FunctionType* funcType = new FunctionType(node.paramTypes, retType);
+        FunctionType* funcType = new FunctionType(node.paramTypes, node.returnType);
         SymbolInfo info{node.name, funcType, SemanticSymbolKind::Function, symTable.getCurrentLevel()};
         if (!symTable.insert(node.name, info)) {
             error("Function '" + node.name + "' already declared.");
@@ -151,45 +151,23 @@ Type* TypeInferenceVisitor::visit(IfNode& node) {
 // ============================================================================
 
 Type* TypeInferenceVisitor::visit(FunctionCallNode& node) {
-    if (collecting) {
-        node.type = UnknownType::instance();
-        return node.type;
-    }
-
-    SymbolInfo* funcInfo = symTable.lookup(node.name);
-    if (!funcInfo || funcInfo->kind != SemanticSymbolKind::Function) {
-        error("Function '" + node.name + "' not declared or is not a function.");
-        node.type = UnknownType::instance();
-        return node.type;
-    }
-    FunctionType* funcType = dynamic_cast<FunctionType*>(funcInfo->type);
-    if (!funcType) {
-        error("'" + node.name + "' is not a function.");
-        node.type = UnknownType::instance();
-        return node.type;
-    }
-    if (node.args.size() != funcType->getParamTypes().size()) {
-        error("Incorrect number of arguments for '" + node.name +
-              "'. Expected " + std::to_string(funcType->getParamTypes().size()) +
-              ", got " + std::to_string(node.args.size()));
-        node.type = UnknownType::instance();
-        return node.type;
-    }
-    for (size_t i = 0; i < node.args.size(); ++i) {
-        Type* argType = node.args[i]->accept(*this);
-        if (!argType->equals(funcType->getParamTypes()[i])) {
-            error("Argument " + std::to_string(i+1) + " of '" + node.name +
-                  "' expected type " + funcType->getParamTypes()[i]->toString() +
-                  ", but has type " + argType->toString());
+    // Inferr args types
+    for (auto* arg : node.args) {
+        arg->accept(*this);
+        if (!arg->type) {
+            error("Argument has no type");
+            return nullptr;
         }
     }
-    node.type = funcType->getReturnType();
-
-    // Registrar dependencia en el grafo (solo si estamos dentro de una función)
-    if (!currentFuncStack.empty()) {
-        DepNode* calledNode = depGraph.getOrCreateNode(node.name, DepNodeKind::Function, nullptr);
-        depGraph.addDependency(currentFuncStack.back(), calledNode);
+    std::vector<Type*> argTypes;
+    for (auto* arg : node.args) argTypes.push_back(arg->type);
+    // Look for function
+    FunctionType* funcType = symTable.lookupFunction(node.name, argTypes);
+    if (!funcType) {
+        error("Function '" + node.name + "' not declared or no matching overload");
+        return nullptr;
     }
+    node.type = funcType->getReturnType();
     return node.type;
 }
 
