@@ -20,7 +20,7 @@ int main() {
     try {
         std::cout << "\n=== FULL PIPELINE TEST (Parser + Semantic + LLVM IR) ===\n\n";
 
-        // 1. Cargar gramática y construir parser
+        // 1. oad grammar & build parser
         Grammar grammar = build_grammar_from_file(grammar_dir);
         std::unordered_map<std::string, uint32_t> name_to_id;
         for (size_t i = 0; i < grammar.symtab.size(); ++i)
@@ -30,7 +30,7 @@ int main() {
         LALRParser parser = LALRParser::from_grammar(grammar, eof_id);
         parser.set_builder(std::make_unique<ASTBuilder>());
 
-        // 2. Lexer y lectura del programa
+        // Lexer 
         Lexer lexer(default_token_specs());
         std::ifstream file(program_dir);
         if (!file.is_open()) {
@@ -43,7 +43,7 @@ int main() {
         file.close();
         std::cout << "Input program:\n" << input << "\n";
 
-        // 3. Tokenización
+        // 3. Tokenization
         std::vector<Token> raw_tokens = lexer.tokenize(input);
         std::vector<Token> tokens;
         for (auto& t : raw_tokens) {
@@ -57,7 +57,7 @@ int main() {
         }
         tokens.emplace_back(name_to_id["$"], "$", 0, 0);
 
-        // 4. Parseo
+        // 4. Parsing
         ParseResult result = parser.parse(tokens);
         if (!result.is_success()) {
             std::cerr << "Parse failed: " << result.error_message << "\n";
@@ -69,7 +69,7 @@ int main() {
             return 1;
         }
 
-        // 5. Análisis semántico (registra built-ins, infiere tipos, comprueba)
+        // Semantic Analysis
         SemanticSymbolTable symTable;
         SemanticAnalyzer analyzer(symTable);
         analyzer.analyze(program);
@@ -83,9 +83,9 @@ int main() {
         std::cout << "\n=== Abstract Syntax Tree (with types) ===\n";
         program->print(std::cout);
         std::cout << "\n";
-        
+
         /*
-        // 6. Generación de LLVM IR
+        // LLVM IR Generation
         LLVMIRGenerator llvmGen;
         if (!llvmGen.generate(program)) {
             std::cerr << "LLVM IR generation failed.\n";
@@ -94,7 +94,7 @@ int main() {
         llvmGen.writeToFile("output.ll");
         std::cout << "LLVM IR written to output.ll\n";
 
-        // 7. (Opcional) Compilar y ejecutar usando el executor
+        // Compile & execute using the executor
         LLVMExecutor executor;
         int exitCode = executor.compileAndRun(program, "output.ll", "program");
         if (exitCode >= 0)
