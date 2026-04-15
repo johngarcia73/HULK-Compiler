@@ -3,6 +3,7 @@
 #include "symbol_table.hpp"
 #include <vector>
 #include <string>
+#include <stack>
 
 class SemanticAnalyzer : public Visitor {
     SemanticSymbolTable& symTable;
@@ -38,5 +39,6 @@ public:
     Type* visit(ParamListNode& node) override;
     Type* visit(LetBindingNode& node) override;
     Type* visit(LetBindingsNode& node) override;
-    Type* visit(TypeNode& node) override;
+    Type *visit(ReturnNode &node);
+    Type *visit(TypeNode &node) override;
 };

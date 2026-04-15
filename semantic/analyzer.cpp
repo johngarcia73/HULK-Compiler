@@ -51,7 +51,15 @@ void SemanticAnalyzer::analyze(ProgramNode* root) {
     TypeInferenceVisitor inferencer(symTable, graph);
     inferencer.infer(root);
 
-    root->accept(*this);
+    if (inferencer.hasErrors()) {
+        for (const auto& err : inferencer.getErrors()) {
+            error(err);
+        }
+        // Maybe continue to detect more errors?
+    }
+
+    if (!hasErrors()) root->accept(*this);
+    
     reportErrors();
 }
 
@@ -76,35 +84,37 @@ Type* SemanticAnalyzer::visit(BlockNode& node) {
     symTable.exitScope();
     return nullptr;
 }
-
 Type* SemanticAnalyzer::visit(FunctionDeclNode& node) {
     SymbolInfo* existing = symTable.lookup(node.name);
     if (existing && existing->scopeLevel == 0 && existing->kind == SemanticSymbolKind::Function) {
         error("Cannot redeclare built-in function '" + node.name + "'");
         return nullptr;
     }
-
-    FunctionType* funcType = new FunctionType(node.paramTypes, node.returnType);
-
-    if (!symTable.insertFunction(node.name, funcType)) {
-        error("Function '" + node.name + "' with same signature already declared in this scope");
+    
+    if (!existing || existing->kind != SemanticSymbolKind::Function) {
+        error("Function '" + node.name + "' not found in symbol table");
         return nullptr;
     }
 
-    symTable.enterScope();
-    for (size_t i = 0; i < node.params.size(); ++i) {
-        SymbolInfo paramInfo(node.params[i], node.paramTypes[i],
-                             SemanticSymbolKind::Parameter, symTable.getCurrentLevel());
-        if (!symTable.insert(node.params[i], paramInfo)) {
-            error("Duplicate parameter: " + node.params[i]);
-        }
+    if (!node.body) {
+        error("Function '" + node.name + "' has no body");
+        return nullptr;
     }
-    // Analyze body
-    node.body->accept(*this);
-    symTable.exitScope();
+
+    // Get the body type
+    Type* actualReturnType = node.body->type ? node.body->type : VoidType::instance();
+    Type* declaredReturnType = node.returnType ? node.returnType : VoidType::instance();
+
+    if (!declaredReturnType->equals(actualReturnType)) {
+        error("Return type mismatch in function '" + node.name + "': declared " +
+              declaredReturnType->toString() + " but body returns " +
+              actualReturnType->toString());
+        return nullptr;
+    }
 
     return nullptr;
 }
+
 
 Type* SemanticAnalyzer::visit(LetNode& node) {
     // New scope for let body
@@ -234,3 +244,7 @@ Type* SemanticAnalyzer::visit(StringNode& node) { return nullptr; }
 Type* SemanticAnalyzer::visit(ParamListNode& node) { return nullptr; }
 Type* SemanticAnalyzer::visit(LetBindingNode& node) { return nullptr; }
 Type* SemanticAnalyzer::visit(LetBindingsNode& node) { return nullptr; }
+
+Type* SemanticAnalyzer::visit(ReturnNode& node) {
+    return nullptr;
+}

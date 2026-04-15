@@ -1,12 +1,12 @@
 #include "type_inference_visitor.hpp"
 #include <iostream>
+#include <stack>
 
 void TypeInferenceVisitor::infer(ProgramNode* root) {
     // Phase 1: collect all declarations (functions, global variables, etc.)
     collecting = true;
     root->accept(*this);
     if (hasErrors()) {
-        reportErrors();
         return;
     }
 
@@ -15,7 +15,6 @@ void TypeInferenceVisitor::infer(ProgramNode* root) {
     for (auto* func : pendingFunctions) {
         func->accept(*this);
         if (hasErrors()) {
-            reportErrors();
             return;
         }
     }
@@ -63,12 +62,13 @@ Type* TypeInferenceVisitor::visit(BlockNode& node) {
 // ============================================================================
 // Function declarations
 // ============================================================================
-
 Type* TypeInferenceVisitor::visit(FunctionDeclNode& node) {
     if (collecting) {
-        // Register the function in the symbol table
+        // Get return type (default: Void)
         Type* retType = node.returnType ? node.returnType : VoidType::instance();
-        FunctionType* funcType = new FunctionType(node.paramTypes, node.returnType);
+        node.returnType = retType;  
+
+        FunctionType* funcType = new FunctionType(node.paramTypes, retType);
         SymbolInfo info{node.name, funcType, SemanticSymbolKind::Function, symTable.getCurrentLevel()};
         if (!symTable.insert(node.name, info)) {
             error("Function '" + node.name + "' already declared.");
@@ -77,7 +77,10 @@ Type* TypeInferenceVisitor::visit(FunctionDeclNode& node) {
         pendingFunctions.push_back(&node);
         return nullptr;
     } else {
-        // Analyze the function body
+        // Analyze function body
+        Type* retType = node.returnType ? node.returnType : VoidType::instance();
+        returnTypeStack.push(retType);
+
         DepNode* depNode = depGraph.getOrCreateNode(node.name, DepNodeKind::Function, &node);
         currentFuncStack.push_back(depNode);
         symTable.enterScope();
@@ -91,12 +94,38 @@ Type* TypeInferenceVisitor::visit(FunctionDeclNode& node) {
             }
         }
 
-        node.body->accept(*this);
+        if (node.body) {
+            node.body->accept(*this);
+        } else {
+            error("Function '" + node.name + "' has no body");
+        }
 
         symTable.exitScope();
         currentFuncStack.pop_back();
+        returnTypeStack.pop();
         return nullptr;
     }
+}
+
+Type* TypeInferenceVisitor::visit(ReturnNode& node) {
+    node.expr->accept(*this);
+    if (!node.expr->type) {
+        error("Return expression has no type");
+        return nullptr;
+    }
+    node.type = node.expr->type;
+    
+    if (returnTypeStack.empty()) {
+        error("Return outside function");
+        return nullptr;
+    }
+    Type* expected = returnTypeStack.top();
+    if (expected && !expected->equals(node.expr->type)) {
+        error("Return type mismatch: expected " + expected->toString() +
+              " but got " + node.expr->type->toString());
+        return nullptr;
+    }// Mark that function has an explicit return
+    return node.type;
 }
 
 // ============================================================================

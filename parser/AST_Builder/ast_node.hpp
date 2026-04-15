@@ -262,3 +262,11 @@ struct TypeNode : ASTNode {
     void print(std::ostream& o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
 };
+
+struct ReturnNode : ASTNode {
+    ASTNodePtr expr;
+    ReturnNode(ASTNodePtr e);
+    ~ReturnNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};

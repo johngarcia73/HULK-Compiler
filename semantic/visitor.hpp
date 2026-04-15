@@ -43,4 +43,5 @@ public:
     virtual Type* visit(StringNode& node) = 0;
     virtual Type* visit(BoolNode& node) = 0;
     virtual Type* visit(TypeNode& node) = 0;
+    virtual Type* visit(ReturnNode& node) = 0;
 };

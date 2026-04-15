@@ -1,1 +1,7 @@
-print(2);
+function operate(x: Number, y: Number): Number {
+print(x + y);
+print(x - y);
+print(x * y);
+print(x / y);
+return 3;
+}

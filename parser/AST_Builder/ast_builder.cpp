@@ -53,7 +53,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
                 paramTypes = std::move(paramsNode->paramTypes);
                 delete paramsNode;
             }
-            Type* retType = NumberType::instance();
+            Type* retType = VoidType::instance();
             return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, RHS(5));
         }
 
@@ -139,7 +139,11 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         case 16: BUILD_BLOCK(RHS(0), RHS(1));                // statements : statements statement
         case 17: return new ExprStmtNode(RHS(0));            // statement : expr SEMICOLON
         case 18: PASS();                                      // statement : block
-        case 19: { // block : L_CURL_BRACK statements R_CURL_BRACK
+        case 19: PASS();                                      // statement : return_stmt (forward)
+        case 20: { // return_stmt : RETURN expr SEMICOLON
+            return new ReturnNode(RHS(1));
+        }
+        case 21: { // block : L_CURL_BRACK statements R_CURL_BRACK
             if (auto* b = dynamic_cast<BlockNode*>(RHS(1))) {
                 auto v = std::move(b->stmts);
                 delete b;
@@ -150,59 +154,59 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         }
 
         // ========== Expression forwarding ==========
-        case 20: // expr -> relational
-        case 21: // expr -> let_expr
-        case 22: // expr -> if_expr
-        case 23: // expr -> call_expr
-        case 24: // relational -> concatenation
-        case 30: // concatenation -> additive
-        case 32: // additive -> multiplicative
-        case 35: // multiplicative -> unary
-        case 40: // unary -> primary
+        case 22: // expr -> relational
+        case 23: // expr -> let_expr
+        case 24: // expr -> if_expr
+        case 25: // expr -> call_expr
+        case 26: // relational -> concatenation
+        case 32: // concatenation -> additive
+        case 34: // additive -> multiplicative
+        case 37: // multiplicative -> unary
+        case 42: // unary -> primary
             PASS();
 
         // ========== Binary operators ==========
-        case 25: BIN_OP("<");   // relational -> concatenation LESS_THAN concatenation
-        case 26: BIN_OP(">");
-        case 27: BIN_OP("<=");
-        case 28: BIN_OP(">=");
-        case 29: BIN_OP("==");
-        case 31: BIN_OP("@");   // concatenation -> concatenation CONCAT additive
-        case 33: BIN_OP("+");   // additive -> additive PLUS multiplicative
-        case 34: BIN_OP("-");
-        case 36: BIN_OP("*");   // multiplicative -> multiplicative STAR unary
-        case 37: BIN_OP("/");
+        case 27: BIN_OP("<");   // relational -> concatenation LESS_THAN concatenation
+        case 28: BIN_OP(">");
+        case 29: BIN_OP("<=");
+        case 30: BIN_OP(">=");
+        case 31: BIN_OP("==");
+        case 33: BIN_OP("@");   // concatenation -> concatenation CONCAT additive
+        case 35: BIN_OP("+");   // additive -> additive PLUS multiplicative
+        case 36: BIN_OP("-");
+        case 38: BIN_OP("*");   // multiplicative -> multiplicative STAR unary
+        case 39: BIN_OP("/");
 
         // ========== Unary operators ==========
-        case 38: UNARY_OP("-");
-        case 39: UNARY_OP("+");
+        case 40: UNARY_OP("-");
+        case 41: UNARY_OP("+");
 
         // ========== Primaries ==========
-        case 41: { // NUMBER
+        case 43: { // NUMBER
             long long v = parse_int(rhs[0].token_text);
             return new NumberNode(v);
         }
-        case 42: { // STRING
+        case 44: { // STRING
             std::string s = TOKEN(0);
             if (s.size() >= 2 && s.front() == '"' && s.back() == '"')
                 s = s.substr(1, s.size() - 2);
             return new StringNode(s);
         }
-        case 43: // IDENTIFIER
+        case 45: // IDENTIFIER
             return new VariableNode(TOKEN(0));
-        case 44: // L_PAREN expr R_PAREN
+        case 46: // L_PAREN expr R_PAREN
             return RHS(1);
 
         // ========== Let expression ==========
-        case 45: // LET IDENTIFIER EQUAL expr IN expr
+        case 47: // LET IDENTIFIER EQUAL expr IN expr
             return new LetNode(TOKEN(1), RHS(3), RHS(5));
 
         // ========== If expression ==========
-        case 46: // IF L_PAREN expr R_PAREN expr ELSE expr
+        case 48: // IF L_PAREN expr R_PAREN expr ELSE expr
             return new IfNode(RHS(2), RHS(4), RHS(6));
 
         // ========== Function call ==========
-        case 47: { // call_expr : IDENTIFIER L_PAREN arg_list_opt R_PAREN
+        case 49: { // call_expr : IDENTIFIER L_PAREN arg_list_opt R_PAREN
             std::string name = TOKEN(0);
             std::vector<ASTNode*> args;
             if (auto* argBlock = dynamic_cast<BlockNode*>(RHS(2))) {
@@ -213,13 +217,13 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         }
 
         // ========== Argument lists ==========
-        case 48: EMPTY_BLOCK();          // arg_list_opt : ε
-        case 49: PASS();                 // arg_list_opt : arg_list
-        case 50: BUILD_ARG_LIST(RHS(0)); // arg_list -> expr
-        case 51: BUILD_BLOCK(RHS(0), RHS(2)); // arg_list -> arg_list COMMA expr
+        case 50: EMPTY_BLOCK();          // arg_list_opt : ε
+        case 51: PASS();                 // arg_list_opt : arg_list
+        case 52: BUILD_ARG_LIST(RHS(0)); // arg_list -> expr
+        case 53: BUILD_BLOCK(RHS(0), RHS(2)); // arg_list -> arg_list COMMA expr
 
-        // ========== Dummy production ==========
-        case 52: // program' -> program
+        // ========== Dummy production (program') ==========
+        case 54: // program' -> program
             return RHS(0);
 
         default:

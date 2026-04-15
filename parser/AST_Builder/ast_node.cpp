@@ -543,3 +543,14 @@ Type* ProtocolDeclNode::accept(Visitor& v) {
 }
 
 
+ReturnNode::ReturnNode(ASTNodePtr e) : expr(e) {}
+ReturnNode::~ReturnNode() { delete expr; }
+void ReturnNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "Return\n";
+    if (expr) expr->print(o, indent_n + 2);
+}
+
+Type* ReturnNode::accept(Visitor& v) {
+    return v.visit(*this);
+}

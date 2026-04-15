@@ -14,6 +14,7 @@ enum class TokenType : int {
     TOKEN_IN,
     TOKEN_IF,
     TOKEN_ELSE,
+    TOKEN_RETURN,
     
     TOKEN_NUMBER,
     TOKEN_PLUS,
@@ -74,6 +75,7 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_RPAREN:       return "R_PAREN";
         case TokenType::TOKEN_FUNCTION:     return "FUNCTION";
         
+        
         case TokenType::TOKEN_IDENTIFIER:   return "IDENTIFIER";
         case TokenType::TOKEN_L_CURL_BRACK: return "L_CURL_BRACK";
         case TokenType::TOKEN_R_CURL_BRACK: return "R_CURL_BRACK";
@@ -83,8 +85,9 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_IN:           return "IN";
         case TokenType::TOKEN_IF:           return "IF";
         case TokenType::TOKEN_ELSE:         return "ELSE";
+        case TokenType::TOKEN_RETURN:       return "RETURN";
         case TokenType::TOKEN_EQUALITY:     return "EQUALITY";
-        case TokenType::TOKEN_NOT_EQUAL:        return "EQUAL";
+        case TokenType::TOKEN_NOT_EQUAL:    return "EQUAL";
         case TokenType::TOKEN_EQUAL:        return "EQUAL";
         case TokenType::TOKEN_LESS_THAN:    return "LESS_THAN";
         case TokenType::TOKEN_GREATER_THAN: return "GREATER_THAN";
@@ -117,6 +120,8 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_IN,       "in",       false },
         { TokenType::TOKEN_IF,       "if",       false },
         { TokenType::TOKEN_ELSE,     "else",     false },
+        { TokenType::TOKEN_RETURN,     "return",     false },
+
         
         // Numbers
         { TokenType::TOKEN_NUMBER,      "(0|1|2|3|4|5|6|7|8|9)+", false },

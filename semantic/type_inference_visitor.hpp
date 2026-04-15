@@ -4,6 +4,8 @@
 #include "dependency_graph.hpp"   // nuevo
 #include <vector>
 #include <string>
+#include <stack>
+
 
 class TypeInferenceVisitor : public Visitor {
     SemanticSymbolTable& symTable;
@@ -12,9 +14,12 @@ class TypeInferenceVisitor : public Visitor {
     std::vector<DepNode*> currentFuncStack;          // functions stack (for dependencies)
     bool collecting;                                 // collector phase
     std::vector<std::string> errors;
+    
 
     void error(const std::string& msg) { errors.push_back(msg); }
     void reportErrors() const;
+
+    std::stack<Type*> returnTypeStack;
 
 public:
     TypeInferenceVisitor(SemanticSymbolTable& table, DependencyGraph& graph)
@@ -28,7 +33,8 @@ public:
     Type* visit(ProgramNode& node) override;
     Type* visit(BlockNode& node) override;
     Type* visit(FunctionDeclNode& node) override;
-    Type* visit(LetNode& node) override;
+    Type *visit(ReturnNode &node);
+    Type *visit(LetNode &node) override;
     Type* visit(IfNode& node) override;
     Type* visit(FunctionCallNode& node) override;
     Type* visit(VariableNode& node) override;

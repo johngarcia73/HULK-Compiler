@@ -18,6 +18,7 @@
 %token EOF 0
 %token COLON
 %token ARROW "=>"
+%token RETURN
 
 %start program
 
@@ -55,6 +56,9 @@ statements : /* empty */
 
 statement : expr SEMICOLON
           | block
+          | return_stmt
+
+return_stmt: RETURN expr SEMICOLON
 
 block : L_CURL_BRACK statements R_CURL_BRACK
 

@@ -74,8 +74,8 @@ int main() {
         SemanticAnalyzer analyzer(symTable);
         analyzer.analyze(program);
         if (analyzer.hasErrors()) {
-            std::cerr << "Semantic analysis failed:\n";
-            analyzer.reportErrors();
+            //std::cerr << "Semantic analysis failed:\n";
+            //analyzer.reportErrors();
             return 1;
         }
         std::cout << "Semantic analysis successful.\n";
@@ -106,4 +106,4 @@ int main() {
         std::cerr << "FATAL: " << e.what() << "\n";
         return 2;
     }
-}//
+}
