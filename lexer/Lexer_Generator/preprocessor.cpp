@@ -9,6 +9,7 @@ using namespace std;
 #include <string>
 #include <vector>
 #include <cctype>
+#include <unordered_set>
 
 bool isLiteralChar(char ch) {
     return std::isalnum(static_cast<unsigned char>(ch)) || ch == '.';
@@ -32,21 +33,95 @@ std::string purgeIgnorable(const std::string& input) {
     return output;
 }
 
+static std::vector<RegexToken> parse_char_class(const std::string& regex, size_t& pos) {
+    if (regex[pos] != '[') throw std::runtime_error("Expected '['");
+    pos++;
+    bool negated = false;
+    if (pos < regex.size() && regex[pos] == '^') {
+        negated = true;
+        pos++;
+    }
+
+    std::vector<char> chars;
+    while (pos < regex.size() && regex[pos] != ']') {
+        char c = regex[pos];
+        if (c == '\\') {
+            pos++;
+            if (pos >= regex.size()) throw std::runtime_error("Incomplete escape in class");
+            char esc = regex[pos];
+            switch (esc) {
+                case 'n': chars.push_back('\n'); break;
+                case 'r': chars.push_back('\r'); break;
+                case 't': chars.push_back('\t'); break;
+                case '\\': chars.push_back('\\'); break;
+                case ']': chars.push_back(']'); break;
+                default: chars.push_back(esc); break;
+            }
+            pos++;
+        } else if (c == '-' && pos > 0 && regex[pos-1] != '[' && pos+1 < regex.size() && regex[pos+1] != ']') {
+            char start = chars.back();
+            chars.pop_back();
+            char end = regex[pos+1];
+            if (start > end) throw std::runtime_error("Invalid range");
+            for (char ch = start; ch <= end; ++ch) chars.push_back(ch);
+            pos += 2;
+        } else {
+            chars.push_back(c);
+            pos++;
+        }
+    }
+    if (pos >= regex.size() || regex[pos] != ']')
+        throw std::runtime_error("Unclosed character class");
+    pos++;
+
+    std::vector<char> final_chars;
+    if (negated) {
+        std::unordered_set<char> exclude(chars.begin(), chars.end());
+        for (int ch = 0; ch < 256; ++ch) {
+            if (exclude.find((char)ch) == exclude.end())
+                final_chars.push_back((char)ch);
+        }
+    } else {
+        final_chars = std::move(chars);
+    }
+
+    if (final_chars.empty()) {
+        throw std::runtime_error("Empty character class");
+    }
+
+    std::vector<RegexToken> result;
+    result.push_back({RegexTokenType::LParen, 0});
+    for (size_t i = 0; i < final_chars.size(); ++i) {
+        if (i > 0) result.push_back({RegexTokenType::Union, 0});
+        result.push_back({RegexTokenType::Literal, final_chars[i]});
+    }
+    result.push_back({RegexTokenType::RParen, 0});
+    return result;
+}
 
 std::vector<RegexToken> regex_to_RegexTokens(const std::string& regex) {
     std::vector<RegexToken> tokens;
-
-    for (size_t i = 0; i < regex.size(); ++i) {
+    size_t i = 0;
+    while (i < regex.size()) {
         char c = regex[i];
-
-        if (std::isspace(static_cast<unsigned char>(c)))
-            continue;
+        if (std::isspace(static_cast<unsigned char>(c))) { i++; continue; }
 
         if (c == '\\') {
-            if (i + 1 >= regex.size())
-                throw std::runtime_error("Incomplete escape in regex");
+            if (i+1 >= regex.size()) throw std::runtime_error("Incomplete escape");
+            char esc = regex[++i];
+            switch (esc) {
+                case 'n': tokens.push_back({RegexTokenType::Literal, '\n'}); break;
+                case 'r': tokens.push_back({RegexTokenType::Literal, '\r'}); break;
+                case 't': tokens.push_back({RegexTokenType::Literal, '\t'}); break;
+                default: tokens.push_back({RegexTokenType::Literal, esc}); break;
+            }
+            i++;
+            continue;
+        }
 
-            tokens.push_back({RegexTokenType::Literal, regex[++i]});
+        if (c == '[') {
+            auto class_tokens = parse_char_class(regex, i);
+            tokens.insert(tokens.end(), class_tokens.begin(), class_tokens.end());
             continue;
         }
 
@@ -57,11 +132,10 @@ std::vector<RegexToken> regex_to_RegexTokens(const std::string& regex) {
             case '?': tokens.push_back({RegexTokenType::Optional, 0}); break;
             case '(': tokens.push_back({RegexTokenType::LParen, 0}); break;
             case ')': tokens.push_back({RegexTokenType::RParen, 0}); break;
-            default:
-                tokens.push_back({RegexTokenType::Literal, c});
+            default:  tokens.push_back({RegexTokenType::Literal, c}); break;
         }
+        i++;
     }
-
     return tokens;
 }
 

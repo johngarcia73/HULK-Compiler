@@ -24,26 +24,34 @@ static Type* tokenToType(const Value& v) {
 ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     switch (pid) {
         // ========== Program structure ==========
-        case 0: { // program : declarations statements
-            std::vector<ASTNode*> decls;
+        case 0: { // program : top_level_items
             if (auto* block = dynamic_cast<BlockNode*>(RHS(0))) {
-                decls = std::move(block->stmts);
+                auto items = std::move(block->stmts);
                 delete block;
-            } else if (RHS(0)) decls.push_back(RHS(0));
-            std::vector<ASTNode*> stmts;
-            if (auto* block = dynamic_cast<BlockNode*>(RHS(1))) {
-                stmts = std::move(block->stmts);
-                delete block;
-            } else if (RHS(1)) stmts.push_back(RHS(1));
-            return new ProgramNode(std::move(decls), std::move(stmts));
+                std::vector<ASTNode*> decls;
+                std::vector<ASTNode*> stmts;
+                for (auto* item : items) {
+                    if (dynamic_cast<FunctionDeclNode*>(item))
+                        decls.push_back(item);
+                    else
+                        stmts.push_back(item);
+                }
+                return new ProgramNode(std::move(decls), std::move(stmts));
+            }
+            return new ProgramNode({}, {});
         }
 
-        case 1: EMPTY_BLOCK();                      // declarations : ε
-        case 2: BUILD_BLOCK(RHS(0), RHS(1));       // declarations : declarations declaration
-        case 3: PASS();                             // declaration : function_decl
+        case 1: EMPTY_BLOCK();                      // top_level_items : ε
+        case 2: BUILD_BLOCK(RHS(0), RHS(1));       // top_level_items : top_level_items top_level_item
+
+        case 3:  // top_level_item : declaration
+        case 4:  // top_level_item : statement
+            PASS();
+
+        case 5: PASS();                             // declaration : function_decl
 
         // ========== Function declarations ==========
-        case 4: { // function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN block
+        case 6: { // function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN block
             std::string name = TOKEN(1);
             auto* paramsNode = dynamic_cast<ParamListNode*>(RHS(3));
             std::vector<std::string> params;
@@ -57,7 +65,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, RHS(5));
         }
 
-        case 5: { // function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type block
+        case 7: { // function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type block
             std::string name = TOKEN(1);
             auto* paramsNode = dynamic_cast<ParamListNode*>(RHS(3));
             std::vector<std::string> params;
@@ -73,7 +81,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, RHS(7));
         }
 
-        case 6: { // inline sin tipo: FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN ARROW expr SEMICOLON
+        case 8: { // inline sin tipo: FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN ARROW expr SEMICOLON
             std::string name = TOKEN(1);
             auto* paramsNode = dynamic_cast<ParamListNode*>(RHS(3));
             std::vector<std::string> params;
@@ -83,12 +91,12 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
                 paramTypes = std::move(paramsNode->paramTypes);
                 delete paramsNode;
             }
-            Type* retType = nullptr; // se inferirá después
-            ASTNode* exprBody = RHS(5);
+            Type* retType = nullptr;
+            ASTNode* exprBody = RHS(6);
             return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, exprBody, true);
         }
 
-        case 7: { // inline con tipo: FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type ARROW expr SEMICOLON
+        case 9: { // inline con tipo: FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type ARROW expr SEMICOLON
             std::string name = TOKEN(1);
             auto* paramsNode = dynamic_cast<ParamListNode*>(RHS(3));
             std::vector<std::string> params;
@@ -106,16 +114,16 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         }
 
         // ========== Parameters ==========
-        case 8:  return new ParamListNode({}, {});               // param_list_opt : ε
-        case 9:  PASS();                                          // param_list_opt : param_list
-        case 10: { // param_list : IDENTIFIER COLON type
+        case 10: return new ParamListNode({}, {});               // param_list_opt : ε
+        case 11: PASS();                                          // param_list_opt : param_list
+        case 12: { // param_list : IDENTIFIER COLON type
             std::string name = TOKEN(0);
             auto* typeNode = dynamic_cast<TypeNode*>(RHS(2));
             Type* type = typeNode ? typeNode->type : NumberType::instance();
             delete typeNode;
             return new ParamListNode({name}, {type});
         }
-        case 11: { // param_list : param_list COMMA IDENTIFIER COLON type
+        case 13: { // param_list : param_list COMMA IDENTIFIER COLON type
             auto* left = dynamic_cast<ParamListNode*>(RHS(0));
             std::string name = TOKEN(2);
             auto* typeNode = dynamic_cast<TypeNode*>(RHS(4));
@@ -130,20 +138,21 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         }
 
         // ========== Types ==========
-        case 12: return new TypeNode(NumberType::instance());
-        case 13: return new TypeNode(BoolType::instance());
-        case 14: return new TypeNode(StringType::instance());
+        case 14: return new TypeNode(NumberType::instance());
+        case 15: return new TypeNode(BoolType::instance());
+        case 16: return new TypeNode(StringType::instance());
 
-        // ========== Statements and blocks ==========
-        case 15: EMPTY_BLOCK();                               // statements : ε
-        case 16: BUILD_BLOCK(RHS(0), RHS(1));                // statements : statements statement
+        // ========== Statements ==========
         case 17: return new ExprStmtNode(RHS(0));            // statement : expr SEMICOLON
         case 18: PASS();                                      // statement : block
-        case 19: PASS();                                      // statement : return_stmt (forward)
-        case 20: { // return_stmt : RETURN expr SEMICOLON
+        case 19: PASS();                                      // statement : return_stmt
+        case 20: PASS();                                      // statement : if_stmt
+
+        case 21: { // return_stmt : RETURN expr SEMICOLON
             return new ReturnNode(RHS(1));
         }
-        case 21: { // block : L_CURL_BRACK statements R_CURL_BRACK
+
+        case 22: { // block : L_CURL_BRACK statements R_CURL_BRACK
             if (auto* b = dynamic_cast<BlockNode*>(RHS(1))) {
                 auto v = std::move(b->stmts);
                 delete b;
@@ -153,60 +162,85 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             }
         }
 
+        case 23: EMPTY_BLOCK();                               // statements : ε
+        case 24: BUILD_BLOCK(RHS(0), RHS(1));                // statements : statements statement
+
+        // ========== If statement ==========
+        case 25: { // if_stmt : IF L_PAREN expr R_PAREN block
+            return new IfNode(RHS(2), RHS(4), nullptr);
+        }
+        case 26: { // if_stmt : IF L_PAREN expr R_PAREN block ELSE block
+            return new IfNode(RHS(2), RHS(4), RHS(6));
+        }
+
         // ========== Expression forwarding ==========
-        case 22: // expr -> relational
-        case 23: // expr -> let_expr
-        case 24: // expr -> if_expr
-        case 25: // expr -> call_expr
-        case 26: // relational -> concatenation
-        case 32: // concatenation -> additive
-        case 34: // additive -> multiplicative
-        case 37: // multiplicative -> unary
-        case 42: // unary -> primary
+        case 27: // expr -> relational
+        case 28: // expr -> let_expr
+        case 29: // expr -> if_expr
             PASS();
 
-        // ========== Binary operators ==========
-        case 27: BIN_OP("<");   // relational -> concatenation LESS_THAN concatenation
-        case 28: BIN_OP(">");
-        case 29: BIN_OP("<=");
-        case 30: BIN_OP(">=");
-        case 31: BIN_OP("==");
-        case 33: BIN_OP("@");   // concatenation -> concatenation CONCAT additive
-        case 35: BIN_OP("+");   // additive -> additive PLUS multiplicative
-        case 36: BIN_OP("-");
-        case 38: BIN_OP("*");   // multiplicative -> multiplicative STAR unary
-        case 39: BIN_OP("/");
+        // ========== Relational operators ==========
+        case 30: PASS(); // relational -> concatenation
+        case 31: BIN_OP("<");
+        case 32: BIN_OP(">");
+        case 33: BIN_OP("<=");
+        case 34: BIN_OP(">=");
+        case 35: BIN_OP("==");
 
-        // ========== Unary operators ==========
-        case 40: UNARY_OP("-");
-        case 41: UNARY_OP("+");
+        // ========== Concatenation ==========
+        case 36: PASS(); // concatenation -> additive
+        case 37: BIN_OP("@");
 
-        // ========== Primaries ==========
-        case 43: { // NUMBER
+        // ========== Additive ==========
+        case 38: PASS(); // additive -> multiplicative
+        case 39: BIN_OP("+");
+        case 40: BIN_OP("-");
+
+        // ========== Multiplicative ==========
+        case 41: PASS(); // multiplicative -> unary
+        case 42: BIN_OP("*");
+        case 43: BIN_OP("/");
+
+        // ========== Unary ==========
+        case 44: UNARY_OP("-");
+        case 45: UNARY_OP("+");
+        case 46: PASS(); // unary -> primary
+
+        // ========== Primary ==========
+        case 47: { // NUMBER
             long long v = parse_int(rhs[0].token_text);
             return new NumberNode(v);
         }
-        case 44: { // STRING
+        case 48: { // STRING
             std::string s = TOKEN(0);
             if (s.size() >= 2 && s.front() == '"' && s.back() == '"')
                 s = s.substr(1, s.size() - 2);
             return new StringNode(s);
         }
-        case 45: // IDENTIFIER
+        case 49: // IDENTIFIER
             return new VariableNode(TOKEN(0));
-        case 46: // L_PAREN expr R_PAREN
+        case 50: { // IDENTIFIER L_PAREN arg_list_opt R_PAREN  (llamada a función)
+            std::string name = TOKEN(0);
+            std::vector<ASTNode*> args;
+            if (auto* argBlock = dynamic_cast<BlockNode*>(RHS(2))) {
+                args = std::move(argBlock->stmts);
+                delete argBlock;
+            } else if (RHS(2)) args.push_back(RHS(2));
+            return new FunctionCallNode(name, std::move(args));
+        }
+        case 51: // L_PAREN expr R_PAREN
             return RHS(1);
 
         // ========== Let expression ==========
-        case 47: // LET IDENTIFIER EQUAL expr IN expr
+        case 52: // LET IDENTIFIER EQUAL expr IN expr
             return new LetNode(TOKEN(1), RHS(3), RHS(5));
 
         // ========== If expression ==========
-        case 48: // IF L_PAREN expr R_PAREN expr ELSE expr
+        case 53: // IF L_PAREN expr R_PAREN expr ELSE expr
             return new IfNode(RHS(2), RHS(4), RHS(6));
 
-        // ========== Function call ==========
-        case 49: { // call_expr : IDENTIFIER L_PAREN arg_list_opt R_PAREN
+        // ========== Call expression (obsoleta, mantenida por compatibilidad) ==========
+        case 54: { // call_expr : IDENTIFIER L_PAREN arg_list_opt R_PAREN
             std::string name = TOKEN(0);
             std::vector<ASTNode*> args;
             if (auto* argBlock = dynamic_cast<BlockNode*>(RHS(2))) {
@@ -217,13 +251,13 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         }
 
         // ========== Argument lists ==========
-        case 50: EMPTY_BLOCK();          // arg_list_opt : ε
-        case 51: PASS();                 // arg_list_opt : arg_list
-        case 52: BUILD_ARG_LIST(RHS(0)); // arg_list -> expr
-        case 53: BUILD_BLOCK(RHS(0), RHS(2)); // arg_list -> arg_list COMMA expr
+        case 55: EMPTY_BLOCK();          // arg_list_opt : ε
+        case 56: PASS();                 // arg_list_opt : arg_list
+        case 57: BUILD_ARG_LIST(RHS(0)); // arg_list -> expr
+        case 58: BUILD_BLOCK(RHS(0), RHS(2)); // arg_list -> arg_list COMMA expr
 
         // ========== Dummy production (program') ==========
-        case 54: // program' -> program
+        case 59: // program' -> program
             return RHS(0);
 
         default:

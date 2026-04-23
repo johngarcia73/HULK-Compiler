@@ -110,23 +110,23 @@ struct FunctionDeclNode : ASTNode {
     std::vector<std::string> params;
     std::vector<Type*> paramTypes;
     Type* returnType;
-    ASTNodePtr body;           // nullptr if inline
-    bool isInline;             // true if inline
-    ASTNodePtr exprBody;       // unique expression (valid if isInline)
 
-    
+    ASTNodePtr body;       // nullptr if inline
+    bool isInline;
+    ASTNodePtr exprBody;
+
+    FunctionType* inferredFunctionType = nullptr;
+
     FunctionDeclNode(std::string n, std::vector<std::string> p, std::vector<Type*> pt,
                      Type* rt, ASTNodePtr b);
 
-    // inline constructor
     FunctionDeclNode(std::string n, std::vector<std::string> p, std::vector<Type*> pt,
                      Type* rt, ASTNodePtr eBody, bool inlineFlag);
-
     ~FunctionDeclNode();
+
     void print(std::ostream& o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
 };
-
 struct LetNode : ASTNode {
     std::string name;
     ASTNodePtr init;

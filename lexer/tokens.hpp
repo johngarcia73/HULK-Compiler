@@ -17,6 +17,8 @@ enum class TokenType : int {
     TOKEN_RETURN,
     
     TOKEN_NUMBER,
+    TOKEN_STRING,
+    TOKEN_ARROW,
     TOKEN_PLUS,
     TOKEN_MINUS,
     TOKEN_STAR,
@@ -66,6 +68,7 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_BOOL_TYPE:    return "BOOL_TYPE";
         case TokenType::TOKEN_STRING_TYPE:  return "STRING_TYPE";
         case TokenType::TOKEN_NUMBER:       return "NUMBER";
+        case TokenType::TOKEN_STRING:       return "STRING";
         case TokenType::TOKEN_PLUS:         return "PLUS";
         case TokenType::TOKEN_MINUS:        return "MINUS";
         case TokenType::TOKEN_STAR:         return "STAR";
@@ -87,11 +90,12 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_ELSE:         return "ELSE";
         case TokenType::TOKEN_RETURN:       return "RETURN";
         case TokenType::TOKEN_EQUALITY:     return "EQUALITY";
-        case TokenType::TOKEN_NOT_EQUAL:    return "EQUAL";
+        case TokenType::TOKEN_NOT_EQUAL:    return "NOT_EQUAL";
         case TokenType::TOKEN_EQUAL:        return "EQUAL";
+        case TokenType::TOKEN_ARROW:        return "ARROW";
         case TokenType::TOKEN_LESS_THAN:    return "LESS_THAN";
         case TokenType::TOKEN_GREATER_THAN: return "GREATER_THAN";
-        case TokenType::TOKEN_LESS_EQUALS: return "LESSER_EQUALS";
+        case TokenType::TOKEN_LESS_EQUALS: return "LESS_EQUALS";
         case TokenType::TOKEN_GREATER_EQUALS: return "GREATER_EQUALS";
         case TokenType::TOKEN_COLON:        return "COLON";
         case TokenType::TOKEN_EOF:          return "$";
@@ -107,8 +111,6 @@ struct TokenSpec {
     TokenSpec(TokenType t, const std::string& r, bool s = false)
         : type(t), regex_infix(r), skip(s) {}
 };
-
-// Default token specifications (used by lexer generator)
 inline std::vector<TokenSpec> default_token_specs() {
     return {
         // Keywords
@@ -120,39 +122,37 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_IN,       "in",       false },
         { TokenType::TOKEN_IF,       "if",       false },
         { TokenType::TOKEN_ELSE,     "else",     false },
-        { TokenType::TOKEN_RETURN,     "return",     false },
+        { TokenType::TOKEN_RETURN,   "return",   false },
 
-        
-        // Numbers
-        { TokenType::TOKEN_NUMBER,      "(0|1|2|3|4|5|6|7|8|9)+", false },
-        // Operators
+        { TokenType::TOKEN_STRING,   R"("([^"\\]|\\.)*")", false },
+
+        { TokenType::TOKEN_NUMBER,   "[0-9]+", false },
+
+        // Operators and symbols
         { TokenType::TOKEN_PLUS,     "\\+", false },
         { TokenType::TOKEN_MINUS,    "-",   false },
         { TokenType::TOKEN_STAR,     "\\*", false },
         { TokenType::TOKEN_SLASH,    "/",   false },
-        { TokenType::TOKEN_CONCAT,    "@",   false },
+        { TokenType::TOKEN_CONCAT,   "@",   false },
         { TokenType::TOKEN_LESS_THAN,    "<",   false },
-        { TokenType::TOKEN_GREATER_THAN,    ">",   false },
-        { TokenType::TOKEN_LESS_EQUALS,    ">=",   false },
-        { TokenType::TOKEN_GREATER_EQUALS,    ">=",   false },
+        { TokenType::TOKEN_GREATER_THAN, ">",   false },
+        { TokenType::TOKEN_LESS_EQUALS,    "<=",   false },   // corregido
+        { TokenType::TOKEN_GREATER_EQUALS, ">=",   false },
+        { TokenType::TOKEN_EQUALITY, "==", false },
+        { TokenType::TOKEN_NOT_EQUAL, "!=", false },
+        { TokenType::TOKEN_EQUAL,    "=",  false },
+        { TokenType::TOKEN_ARROW,    "=>", false },
         { TokenType::TOKEN_LPAREN,   "\\(", false },
         { TokenType::TOKEN_RPAREN,   "\\)", false },
         { TokenType::TOKEN_L_CURL_BRACK, "\\{", false },
         { TokenType::TOKEN_R_CURL_BRACK, "\\}", false },
         { TokenType::TOKEN_SEMICOLON, ";", false },
         { TokenType::TOKEN_COMMA,    ",", false },
-        { TokenType::TOKEN_EQUALITY,    "==",  false },
-        { TokenType::TOKEN_NOT_EQUAL,    "!=",  false },
-        { TokenType::TOKEN_EQUAL,    "=",  false },
-        { TokenType::TOKEN_COLON, ":", false },
+        { TokenType::TOKEN_COLON,    ":", false },
+
         // Identifiers
-        { TokenType::TOKEN_IDENTIFIER,
-          "(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|_)(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)*",
-          false },
-        // Whitespaces (skipped)
-        { TokenType::TOKEN_WHITESPACE, "(\\ )+", true },
-        { TokenType::TOKEN_NEWLINE, "(\\n )+", true }
-        
+        { TokenType::TOKEN_IDENTIFIER, "[a-zA-Z_][a-zA-Z0-9_]*", false },
+        { TokenType::TOKEN_WHITESPACE, "[ \t\n\r]+", true },
     };
 }
 

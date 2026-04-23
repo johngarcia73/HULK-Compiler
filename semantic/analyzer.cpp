@@ -11,8 +11,9 @@ void SemanticAnalyzer::registerBuiltinFunctions() {
     
 
     // Ensure theres a global scope 
-    if (symTable.getCurrentLevel() == 0 && !symTable.getCurrentLevel())
+    if (symTable.getCurrentLevel() == 0) {
         symTable.enterScope();
+    }
 
     // Math (Number -> Number)
     auto mathType = new FunctionType({NumberType::instance()}, NumberType::instance());
@@ -37,6 +38,9 @@ void SemanticAnalyzer::registerBuiltinFunctions() {
     printOverloads.push_back(new FunctionType({NumberType::instance()}, VoidType::instance()));
     // print(String)
     printOverloads.push_back(new FunctionType({StringType::instance()}, VoidType::instance()));
+    // print(Unknown)
+    printOverloads.push_back(new FunctionType({UnknownType::instance()}, VoidType::instance()));
+
 
     SymbolInfo printInfo("print", printOverloads, SemanticSymbolKind::Function, 0);
     symTable.insert("print", printInfo);
@@ -96,13 +100,22 @@ Type* SemanticAnalyzer::visit(FunctionDeclNode& node) {
         return nullptr;
     }
 
-    if (!node.body) {
-        error("Function '" + node.name + "' has no body");
-        return nullptr;
+    Type* actualReturnType = nullptr;
+    if (node.isInline) {
+        if (!node.exprBody) {
+            error("Inline function '" + node.name + "' has no expression body");
+            return nullptr;
+        }
+        actualReturnType = node.exprBody->type;
+    } else {
+        if (!node.body) {
+            error("Function '" + node.name + "' has no body");
+            return nullptr;
+        }
+        actualReturnType = node.body->type;
     }
 
-    // Get the body type
-    Type* actualReturnType = node.body->type ? node.body->type : VoidType::instance();
+    if (!actualReturnType) actualReturnType = VoidType::instance();
     Type* declaredReturnType = node.returnType ? node.returnType : VoidType::instance();
 
     if (!declaredReturnType->equals(actualReturnType)) {
@@ -111,10 +124,8 @@ Type* SemanticAnalyzer::visit(FunctionDeclNode& node) {
               actualReturnType->toString());
         return nullptr;
     }
-
     return nullptr;
 }
-
 
 Type* SemanticAnalyzer::visit(LetNode& node) {
     // New scope for let body
@@ -139,12 +150,18 @@ Type* SemanticAnalyzer::visit(LetNode& node) {
 
     return nullptr;
 }
-
 Type* SemanticAnalyzer::visit(IfNode& node) {
     Type* condType = node.condition->type;
+
+    if (!condType || condType->equals(UnknownType::instance())) {
+        error("If condition has no valid type.");
+        return nullptr;
+    }
+
     if (!condType->equals(BoolType::instance())) {
         error("If condition must be boolean.");
     }
+
     node.then_branch->accept(*this);
     node.else_branch->accept(*this);
     return nullptr;
@@ -186,6 +203,7 @@ Type* SemanticAnalyzer::visit(BinaryOpNode& node) {
         error("Typeless operand (inference error).");
         return nullptr;
     }
+
     if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/") {
         if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
             error("arithmetic operadrands require Number operands.");
@@ -199,7 +217,7 @@ Type* SemanticAnalyzer::visit(BinaryOpNode& node) {
             error("Operador '==' requires same type operands.");
         }
     } else if (node.op == "@") {
-        if (!left->equals(StringType::instance()) && !right->equals(StringType::instance())) {
+        if (!left->equals(StringType::instance()) || !right->equals(StringType::instance())) {
             error("Operator '@' requires one String operand.");
         }
     } else {

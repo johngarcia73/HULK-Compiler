@@ -161,6 +161,16 @@ ParseTables LALRBuilder::build(
         for (uint32_t la : kv.second.indices()) std::cout << " " << la;
         std::cout << "\n";
     }
+
+    // Debug: print state 50 core items if available to diagnose parse errors
+    if (lalr.states.size() > 50) {
+        std::cout << "=== LALR state 50 ===\n";
+        for (const auto& kv : lalr.states[50].core_la) {
+            std::cout << "  Prod " << kv.first.prod << " dot " << kv.first.dot << " lookaheads:";
+            for (uint32_t la : kv.second.indices()) std::cout << " " << grammar.symtab[la].name;
+            std::cout << "\n";
+        }
+    }
     
     ParseTables tables = build_tables(lalr, grammar, dollar_symbol, conflicts_out);
     

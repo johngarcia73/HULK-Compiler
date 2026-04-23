@@ -54,6 +54,8 @@ public:
         s += ") -> " + returnType->toString();
         return s;
     }
+
+    
     bool equals(const Type* other) const override {
         auto* otherFunc = dynamic_cast<const FunctionType*>(other);
         if (!otherFunc) return false;
@@ -65,6 +67,8 @@ public:
     }
     const std::vector<Type*>& getParamTypes() const { return paramTypes; }
     Type* getReturnType() const { return returnType; }
+    void setReturnType(Type* t) { returnType = t; }
+
 };
 
 class StringType : public Type {

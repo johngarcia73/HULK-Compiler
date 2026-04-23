@@ -90,14 +90,18 @@ public:
     }
 
 
-    void update(const std::string& name, const SymbolInfo& info) {
+    bool update(const std::string& name, const SymbolInfo& newInfo) {
+        // Buscar desde el ámbito más interno hacia el global
         for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
             auto found = it->find(name);
             if (found != it->end()) {
-                found->second = info;
-                return;
+                // Opcional: verificar que el kind sea el mismo
+                if (found->second.kind != newInfo.kind) return false;
+                found->second = newInfo;
+                return true;
             }
         }
+        return false;
     }
     
     // For debgging

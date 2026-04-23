@@ -1,25 +1,47 @@
 #include "type_inference_visitor.hpp"
 #include <iostream>
 #include <stack>
+#include <unordered_set>
 
 void TypeInferenceVisitor::infer(ProgramNode* root) {
-    // Phase 1: collect all declarations (functions, global variables, etc.)
+    // Fase 1: recolectar declaraciones y dependencias
     collecting = true;
+    collectingDependencies = true;
     root->accept(*this);
-    if (hasErrors()) {
-        return;
-    }
+    if (hasErrors()) return;
 
-    // Phase 2: analyze function bodies in declaration order
     collecting = false;
-    for (auto* func : pendingFunctions) {
-        func->accept(*this);
-        if (hasErrors()) {
-            return;
+    collectingDependencies = false;
+
+    // Ordenar topológicamente
+    std::vector<FunctionDeclNode*> orderedFunctions;
+    if (!depGraph.topologicalSort()) {
+        orderedFunctions = pendingFunctions;
+    } else {
+        const auto& order = depGraph.getTopologicalOrder();
+        std::unordered_set<FunctionDeclNode*> added;
+        for (DepNode* depNode : order) {
+            if (depNode->kind == DepNodeKind::Function && depNode->ast) {
+                if (auto* func = dynamic_cast<FunctionDeclNode*>(depNode->ast)) {
+                    orderedFunctions.push_back(func);
+                    added.insert(func);
+                }
+            }
+        }
+        for (auto* func : pendingFunctions) {
+            if (added.find(func) == added.end()) {
+                orderedFunctions.push_back(func);
+            }
         }
     }
 
-    // Analyze global statements (they may use already-registered functions)
+    // Fase 2: analizar cuerpos en orden topológico
+    for (auto* func : orderedFunctions) {
+        func->accept(*this);
+        if (hasErrors()) return;
+    }
+
+    // Analizar sentencias globales
     root->accept(*this);
     reportErrors();
 }
@@ -64,68 +86,95 @@ Type* TypeInferenceVisitor::visit(BlockNode& node) {
 // ============================================================================
 Type* TypeInferenceVisitor::visit(FunctionDeclNode& node) {
     if (collecting) {
-        // Get return type (default: Void)
-        Type* retType = node.returnType ? node.returnType : VoidType::instance();
-        node.returnType = retType;  
+        Type* retType = node.returnType;
+        if (!retType) retType = UnknownType::instance();
 
+        // 🔴 Crear UNA SOLA instancia de FunctionType
         FunctionType* funcType = new FunctionType(node.paramTypes, retType);
+
+        // Guardar referencia en el nodo (IMPORTANTE)
+        node.inferredFunctionType = funcType;
+
         SymbolInfo info{node.name, funcType, SemanticSymbolKind::Function, symTable.getCurrentLevel()};
         if (!symTable.insert(node.name, info)) {
             error("Function '" + node.name + "' already declared.");
         }
+
         depGraph.getOrCreateNode(node.name, DepNodeKind::Function, &node);
         pendingFunctions.push_back(&node);
-        return nullptr;
-    } else {
-        // Analyze function body
-        Type* retType = node.returnType ? node.returnType : VoidType::instance();
-        returnTypeStack.push(retType);
 
-        DepNode* depNode = depGraph.getOrCreateNode(node.name, DepNodeKind::Function, &node);
-        currentFuncStack.push_back(depNode);
-        symTable.enterScope();
+        if (collectingDependencies) {
+            std::string prev = currentFunctionName;
+            currentFunctionName = node.name;
 
-        // Insert parameters
-        for (size_t i = 0; i < node.params.size(); ++i) {
-            SymbolInfo paramInfo{node.params[i], node.paramTypes[i],
-                                 SemanticSymbolKind::Parameter, symTable.getCurrentLevel()};
-            if (!symTable.insert(node.params[i], paramInfo)) {
-                error("Duplicate parameter: " + node.params[i]);
+            if (node.isInline) {
+                if (node.exprBody) node.exprBody->accept(*this);
+            } else {
+                if (node.body) node.body->accept(*this);
             }
+
+            currentFunctionName = prev;
         }
 
-        if (node.body) {
-            node.body->accept(*this);
-        } else {
-            error("Function '" + node.name + "' has no body");
+        return nullptr;
+    }
+
+    // ================= FASE 2 =================
+
+    FunctionType* funcType = node.inferredFunctionType;
+    if (!funcType) {
+        error("Internal error: missing function type for '" + node.name + "'");
+        return nullptr;
+    }
+
+    Type* declaredRetType = funcType->getReturnType();
+
+    returnTypeStack.push_back(declaredRetType);
+
+    DepNode* depNode = depGraph.getOrCreateNode(node.name, DepNodeKind::Function, &node);
+    currentFuncStack.push_back(depNode);
+
+    symTable.enterScope();
+
+    // Insert params
+    for (size_t i = 0; i < node.params.size(); ++i) {
+        SymbolInfo paramInfo{
+            node.params[i],
+            node.paramTypes[i],
+            SemanticSymbolKind::Parameter,
+            symTable.getCurrentLevel()
+        };
+        symTable.insert(node.params[i], paramInfo);
+    }
+
+    Type* actualRetType = nullptr;
+
+    if (node.isInline) {
+        actualRetType = node.exprBody ? node.exprBody->accept(*this) : UnknownType::instance();
+    } else {
+        actualRetType = node.body ? node.body->accept(*this) : VoidType::instance();
+    }
+
+    if (!actualRetType) actualRetType = UnknownType::instance();
+
+    // ✅ REFINAR tipo en sitio
+    if (declaredRetType->equals(UnknownType::instance())) {
+        funcType->setReturnType(actualRetType);
+        node.returnType = actualRetType;
+
+        std::cerr << "DEBUG: Refined function '" << node.name
+                  << "' to return type " << actualRetType->toString() << "\n";
+    } else {
+        if (!declaredRetType->equals(actualRetType)) {
+            error("Return type mismatch in function '" + node.name + "'");
         }
+    }
 
-        symTable.exitScope();
-        currentFuncStack.pop_back();
-        returnTypeStack.pop();
-        return nullptr;
-    }
-}
+    symTable.exitScope();
+    currentFuncStack.pop_back();
+    returnTypeStack.pop_back();
 
-Type* TypeInferenceVisitor::visit(ReturnNode& node) {
-    node.expr->accept(*this);
-    if (!node.expr->type) {
-        error("Return expression has no type");
-        return nullptr;
-    }
-    node.type = node.expr->type;
-    
-    if (returnTypeStack.empty()) {
-        error("Return outside function");
-        return nullptr;
-    }
-    Type* expected = returnTypeStack.top();
-    if (expected && !expected->equals(node.expr->type)) {
-        error("Return type mismatch: expected " + expected->toString() +
-              " but got " + node.expr->type->toString());
-        return nullptr;
-    }// Mark that function has an explicit return
-    return node.type;
+    return nullptr;
 }
 
 // ============================================================================
@@ -137,12 +186,14 @@ Type* TypeInferenceVisitor::visit(LetNode& node) {
 
     Type* initType = node.init->accept(*this);
     if (!initType) initType = UnknownType::instance();
-
     symTable.enterScope();
     SymbolInfo varInfo{node.name, initType, SemanticSymbolKind::Variable, symTable.getCurrentLevel()};
     if (!symTable.insert(node.name, varInfo)) {
         error("Variable '" + node.name + "' already declared in this scope.");
     }
+    std::cerr << "DEBUG: Let binding '" << node.name << "' inserted with type "
+              << (initType ? initType->toString() : "null") << " at level "
+              << symTable.getCurrentLevel() << "\n";
     Type* bodyType = node.body->accept(*this);
     symTable.exitScope();
 
@@ -180,26 +231,36 @@ Type* TypeInferenceVisitor::visit(IfNode& node) {
 // ============================================================================
 
 Type* TypeInferenceVisitor::visit(FunctionCallNode& node) {
-    // Inferr args types
-    for (auto* arg : node.args) {
-        arg->accept(*this);
-        if (!arg->type) {
-            error("Argument has no type");
-            return nullptr;
+    if (collecting) {
+        if (collectingDependencies && !currentFunctionName.empty()) {
+            DepNode* from = depGraph.getOrCreateNode(currentFunctionName, DepNodeKind::Function, nullptr);
+            DepNode* to   = depGraph.getOrCreateNode(node.name, DepNodeKind::Function, nullptr);
+            depGraph.addDependency(from, to);
         }
-    }
-    std::vector<Type*> argTypes;
-    for (auto* arg : node.args) argTypes.push_back(arg->type);
-    // Look for function
-    FunctionType* funcType = symTable.lookupFunction(node.name, argTypes);
-    if (!funcType) {
-        error("Function '" + node.name + "' not declared or no matching overload");
         return nullptr;
     }
+
+    std::vector<Type*> argTypes;
+
+    for (auto* arg : node.args) {
+        Type* t = arg->accept(*this);
+        if (!t) t = UnknownType::instance();
+        argTypes.push_back(t);
+    }
+
+    FunctionType* funcType = symTable.lookupFunction(node.name, argTypes);
+
+    if (!funcType) {
+        error("Function '" + node.name + "' not found");
+        node.type = UnknownType::instance();
+        return node.type;
+    }
+
     node.type = funcType->getReturnType();
+    if (!node.type) node.type = UnknownType::instance();
+
     return node.type;
 }
-
 // ============================================================================
 // Variable
 // ============================================================================
@@ -209,17 +270,20 @@ Type* TypeInferenceVisitor::visit(VariableNode& node) {
         node.type = UnknownType::instance();
         return node.type;
     }
-
     SymbolInfo* sym = symTable.lookup(node.name);
     if (!sym) {
         error("Variable '" + node.name + "' not declared.");
         node.type = UnknownType::instance();
         return node.type;
     }
+    if (!sym->type) {
+        error("Variable '" + node.name + "' has null type in symbol table.");
+        node.type = UnknownType::instance();
+        return node.type;
+    }
     node.type = sym->type;
     return node.type;
 }
-
 // ============================================================================
 // Literals
 // ============================================================================
@@ -251,36 +315,75 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
 
     Type* left = node.left->accept(*this);
     Type* right = node.right->accept(*this);
-    if (!left || !right) {
-        error("Operand without type in binary expression.");
+
+    if (!left) left = UnknownType::instance();
+    if (!right) right = UnknownType::instance();
+
+    // 🔴 Propagación de Unknown (importante)
+    if (left->equals(UnknownType::instance()) ||
+        right->equals(UnknownType::instance())) {
         node.type = UnknownType::instance();
         return node.type;
     }
 
-    if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/") {
-        if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
-            error("Arithmetic operator requires Number operands.");
+    // =========================
+    // ARITHMETIC
+    // =========================
+    if (node.op == "+" || node.op == "-" ||
+        node.op == "*" || node.op == "/") {
+
+        if (!left->equals(NumberType::instance()) ||
+            !right->equals(NumberType::instance())) {
+            error("Arithmetic operator '" + node.op + "' requires Number operands");
         }
+
         node.type = NumberType::instance();
-    } else if (node.op == "<" || node.op == ">" || node.op == "<=" || node.op == ">=") {
-        if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
-            error("Relational operator requires Number operands.");
+    }
+
+    // =========================
+    // INEQUALITY
+    // =========================
+    else if (node.op == "<" || node.op == ">" ||
+             node.op == "<=" || node.op == ">=") {
+
+        if (!left->equals(NumberType::instance()) ||
+            !right->equals(NumberType::instance())) {
+            error("Relational operator '" + node.op + "' requires Number operands");
         }
-        node.type = BoolType::instance();
-    } else if (node.op == "==") {
+
+        node.type = BoolType::instance();   // 🔴 CLAVE
+    }
+
+    // =========================
+    // EQUALITY
+    // =========================
+    else if (node.op == "==") {
+
         if (!left->equals(right)) {
-            error("Operator '==' requires operands of the same type.");
+            error("Operator '==' requires operands of same type");
         }
-        node.type = BoolType::instance();
-    } else if (node.op == "@") {
-        if (!left->equals(StringType::instance()) || !right->equals(StringType::instance())) {
-            error("Concatenation operator '@' requires String operands.");
+
+        node.type = BoolType::instance();   // 🔴 CLAVE
+    }
+
+    // =========================
+    // CONCAT
+    // =========================
+    else if (node.op == "@") {
+
+        if (!left->equals(StringType::instance()) ||
+            !right->equals(StringType::instance())) {
+            error("Operator '@' requires String operands");
         }
+
         node.type = StringType::instance();
-    } else {
+    }
+
+    else {
         error("Unknown binary operator: " + node.op);
         node.type = UnknownType::instance();
     }
+
     return node.type;
 }
 
@@ -337,3 +440,30 @@ Type* TypeInferenceVisitor::visit(TypeNode& node) {
 Type* TypeInferenceVisitor::visit(ParamListNode& node) { return nullptr; }
 Type* TypeInferenceVisitor::visit(LetBindingNode& node) { return nullptr; }
 Type* TypeInferenceVisitor::visit(LetBindingsNode& node) { return nullptr; }
+
+Type* TypeInferenceVisitor::visit(ReturnNode& node) {
+    if (collecting) return nullptr;
+
+    Type* exprType = node.expr->accept(*this);
+    if (!exprType) exprType = UnknownType::instance();
+
+    node.type = exprType;
+
+    if (returnTypeStack.empty()) {
+        error("Return outside function");
+        return node.type;
+    }
+
+    Type* expected = returnTypeStack.back();
+
+    // ⚠️ Permitir Unknown durante inferencia
+    if (!expected->equals(UnknownType::instance()) &&
+        !exprType->equals(UnknownType::instance()) &&
+        !expected->equals(exprType)) {
+        error("Return type mismatch: expected " +
+              expected->toString() + " but got " +
+              exprType->toString());
+    }
+
+    return node.type;
+}

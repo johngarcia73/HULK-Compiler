@@ -1,4 +1,5 @@
 CXX = g++
+# CXX and flags
 CXXFLAGS = -Iinclude -std=c++17 $(shell llvm-config --cxxflags)
 
 LDFLAGS = $(shell llvm-config --ldflags)

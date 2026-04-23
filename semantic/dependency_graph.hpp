@@ -47,5 +47,6 @@ public:
     // Prints graph for debug.
     void dump() const;
 
+    const std::vector<DepNode*>& getTopologicalOrder() const { return topologicalOrder; }
     const std::vector<DepNode*>& getOrder() const { return topologicalOrder; }
 };

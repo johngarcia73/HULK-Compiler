@@ -1,7 +1,39 @@
-function operate(x: Number, y: Number): Number {
-print(x + y);
-print(x - y);
-print(x * y);
-print(x / y);
-return 3;
+123;
+
+function factorial(n: Number): Number {
+    if (n == 0) {
+        return 1;
+    } else {
+        return n * factorial(n - 1);
+    }
 }
+
+function square(x: Number) => x * x;
+
+function hypotenuse(a: Number, b: Number): Number {
+    return sqrt(square(a) + square(b));
+}
+
+function max(x: Number, y: Number): Number {
+    if (x > y) {
+        return x;
+    } else {
+        return y;
+    }
+}
+
+let a = 5 in let b = 12 in let sum = a+b in print(sum);
+
+let msg = "The sum is: " @ "a" in print(msg);
+
+print("Factorial of 5 is: ");
+let fact = factorial(5) in print(fact);
+
+print("Max of 10 and 20 is: ");
+let m = max(10, 20) in print(m);
+
+print("Absolute value of -42 is: ");
+let absVal = abs(-42) in print(absVal);
+
+print("sin(0) is: ");
+let sinVal = sin(0) in print(sinVal);

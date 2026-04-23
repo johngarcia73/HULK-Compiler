@@ -50,12 +50,20 @@ int main() {
             std::string token_name = token_type_to_string(static_cast<TokenType>(t.symbol_id));
             auto it = name_to_id.find(token_name);
             if (it == name_to_id.end()) {
-                std::cerr << "Unknown token: " << token_name << "\n";
+                std::cerr << "Unknown token: " << t.value << "line: "<< t.line <<" column: "<< t.column<<"\n";
                 return 1;
             }
             tokens.emplace_back(it->second, t.value, t.line, t.column);
         }
         tokens.emplace_back(name_to_id["$"], "$", 0, 0);
+
+        // Debug: print token stream (name -> lexeme)
+        std::vector<std::string> id_to_name(grammar.symtab.size());
+        for (size_t i = 0; i < grammar.symtab.size(); ++i) id_to_name[i] = grammar.symtab[i].name;
+        std::cout << "Token stream:\n";
+        for (auto &tk : tokens) {
+            std::cout << id_to_name[tk.symbol_id] << " -> \"" << tk.value << "\" (" << tk.line << ":" << tk.column << ")\n";
+        }
 
         // 4. Parsing
         ParseResult result = parser.parse(tokens);
@@ -106,4 +114,4 @@ int main() {
         std::cerr << "FATAL: " << e.what() << "\n";
         return 2;
     }
-}
+}//

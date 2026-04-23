@@ -14,17 +14,21 @@ class TypeInferenceVisitor : public Visitor {
     std::vector<DepNode*> currentFuncStack;          // functions stack (for dependencies)
     bool collecting;                                 // collector phase
     std::vector<std::string> errors;
+    std::string currentFunctionName;
+    bool collectingDependencies = false; 
     
 
     void error(const std::string& msg) { errors.push_back(msg); }
     void reportErrors() const;
 
-    std::stack<Type*> returnTypeStack;
+    // Use vector as a simple stack to avoid issues with std::stack/deque reallocations
+    std::vector<Type*> returnTypeStack;
 
 public:
     TypeInferenceVisitor(SemanticSymbolTable& table, DependencyGraph& graph)
         : symTable(table), depGraph(graph), collecting(true) {}
 
+    bool update(const std::string& name, const SymbolInfo& info);
     void infer(ProgramNode* root);
     bool hasErrors() const { return !errors.empty(); }
     const std::vector<std::string>& getErrors() const { return errors; }
