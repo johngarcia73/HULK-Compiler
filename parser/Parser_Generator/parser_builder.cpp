@@ -145,32 +145,7 @@ ParseTables LALRBuilder::build(
     FirstResult first = compute_nullable_first(grammar);
     CanonicalLR1 canonical = build_canonical_lr1_impl(grammar, first, dollar_symbol);
     
-    std::cout << "=== Canonical LR(1) state 0 ===\n";
-    for (const auto& kv : canonical.states[0].core_la) {
-        std::cout << "  Prod " << kv.first.prod << " dot " << kv.first.dot << " lookaheads:";
-        for (uint32_t la : kv.second.indices()) std::cout << " " << la;
-        std::cout << "\n";
-    }
-
-
     LALRAutomaton lalr = merge_to_lalr_impl(canonical, grammar);
-    
-    std::cout << "=== LALR state 0 ===\n";
-    for (const auto& kv : lalr.states[0].core_la) {
-        std::cout << "  Prod " << kv.first.prod << " dot " << kv.first.dot << " lookaheads:";
-        for (uint32_t la : kv.second.indices()) std::cout << " " << la;
-        std::cout << "\n";
-    }
-
-    // Debug: print state 50 core items if available to diagnose parse errors
-    if (lalr.states.size() > 50) {
-        std::cout << "=== LALR state 50 ===\n";
-        for (const auto& kv : lalr.states[50].core_la) {
-            std::cout << "  Prod " << kv.first.prod << " dot " << kv.first.dot << " lookaheads:";
-            for (uint32_t la : kv.second.indices()) std::cout << " " << grammar.symtab[la].name;
-            std::cout << "\n";
-        }
-    }
     
     ParseTables tables = build_tables(lalr, grammar, dollar_symbol, conflicts_out);
     

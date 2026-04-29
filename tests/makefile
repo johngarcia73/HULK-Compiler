@@ -35,3 +35,28 @@ $(TARGET): $(OBJS)
 
 clean:
 	rm -f $(OBJS) $(TARGET)
+
+# Unit tests target: builds a unit_tests binary including the project sources
+UNIT_TARGET = unit_tests
+
+.PHONY: unit
+unit: $(UNIT_TARGET)
+
+$(UNIT_TARGET):
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(filter-out pipeline_test.cpp,$(SRCS)) unit/main.cpp unit/test_lexer.cpp unit/test_parser.cpp unit/test_generators.cpp unit/test_semantic.cpp $(LDLIBS) -o $(UNIT_TARGET)
+
+# Run unit tests (passes ARGS to the test binary)
+.PHONY: run-unit
+run-unit: $(UNIT_TARGET)
+	./$(UNIT_TARGET) $(ARGS)
+
+# Generator helpers (create generated artifacts only when requested)
+.PHONY: gen-lexer
+gen-lexer:
+	mkdir -p gen
+	$(CXX) $(CXXFLAGS) -I.. ../lexer/Lexer_Generator/test.cpp ../lexer/Lexer_Generator/nfa.cpp ../lexer/Lexer_Generator/preprocessor.cpp ../lexer/Lexer_Generator/dfa.cpp ../lexer/lexer.cpp $(LDLIBS) -o gen/lexer_gen
+
+.PHONY: gen-parser
+gen-parser:
+	@echo "Parser generator target: build tools under parser/Parser_Generator if needed."
+	@echo "Use 'make -C parser/Parser_Generator' or run the project-level build to regenerate parser artifacts."

@@ -34,6 +34,7 @@ void DependencyGraph::addDependency(DepNode* from, DepNode* to) {
 
 bool DependencyGraph::topologicalSort() {
     topologicalOrder.clear();
+    cycleMessages.clear();
     // Reset flags
     for (auto& [name, node] : nodes) {
         node->visited = false;
@@ -51,8 +52,8 @@ bool DependencyGraph::topologicalSort() {
             } else if (dep->inStack) {
                 // Cycle detected!
                 hasCycle = true;
-                std::cerr << "Warning: Cycle detected involving " << node->name
-                          << " -> " << dep->name << std::endl;
+                cycleMessages.push_back("Cycle detected involving " + node->name +
+                                        " -> " + dep->name);
             }
         }
         node->inStack = false;
@@ -70,22 +71,22 @@ bool DependencyGraph::topologicalSort() {
     return !hasCycle;
 }
 
-void DependencyGraph::dump() const {
-    std::cout << "=== Dependency Graph ===\n";
+void DependencyGraph::dump(std::ostream& out) const {
+    out << "=== Dependency Graph ===\n";
     for (const auto& [name, node] : nodes) {
-        std::cout << name << " (";
+        out << name << " (";
         switch (node->kind) {
-            case DepNodeKind::Function: std::cout << "function"; break;
-            case DepNodeKind::GlobalVariable: std::cout << "global var"; break;
-            default: std::cout << "unknown";
+            case DepNodeKind::Function: out << "function"; break;
+            case DepNodeKind::GlobalVariable: out << "global var"; break;
+            default: out << "unknown";
         }
-        std::cout << ")\n";
+        out << ")\n";
         if (!node->depends.empty()) {
-            std::cout << "  depends on: ";
+            out << "  depends on: ";
             for (auto* dep : node->depends) {
-                std::cout << dep->name << " ";
+                out << dep->name << " ";
             }
-            std::cout << "\n";
+            out << "\n";
         }
     }
 }

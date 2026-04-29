@@ -19,6 +19,14 @@ static Type* tokenToType(const Value& v) {
     return nullptr;
 }
 
+static SourceSpan merged_rhs_span(const std::vector<Value>& rhs) {
+    SourceSpan combined;
+    for (const auto& value : rhs) {
+        combined = SourceSpan::merge(combined, value_span(value));
+    }
+    return combined;
+}
+
 // ASTBuilder::build - production dispatcher
 // ----------------------------------------------------------------------
 ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
@@ -36,9 +44,9 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
                     else
                         stmts.push_back(item);
                 }
-                return new ProgramNode(std::move(decls), std::move(stmts));
+                return attach_span(new ProgramNode(std::move(decls), std::move(stmts)), block->span);
             }
-            return new ProgramNode({}, {});
+            return attach_span(new ProgramNode({}, {}), merged_rhs_span(rhs));
         }
 
         case 1: EMPTY_BLOCK();                      // top_level_items : ε
@@ -62,7 +70,12 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
                 delete paramsNode;
             }
             Type* retType = VoidType::instance();
-            return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, RHS(5));
+            auto* node = attach_span(
+                new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, RHS(5)),
+                merged_rhs_span(rhs));
+            node->declaredReturnType = nullptr;
+            node->hasExplicitReturnType = false;
+            return node;
         }
 
         case 7: { // function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type block
@@ -78,7 +91,9 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             auto* typeNode = dynamic_cast<TypeNode*>(RHS(6));
             Type* retType = typeNode ? typeNode->type : NumberType::instance();
             delete typeNode;
-            return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, RHS(7));
+            return attach_span(
+                new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, RHS(7)),
+                merged_rhs_span(rhs));
         }
 
         case 8: { // inline sin tipo: FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN ARROW expr SEMICOLON
@@ -93,7 +108,9 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             }
             Type* retType = nullptr;
             ASTNode* exprBody = RHS(6);
-            return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, exprBody, true);
+            return attach_span(
+                new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, exprBody, true),
+                merged_rhs_span(rhs));
         }
 
         case 9: { // inline con tipo: FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type ARROW expr SEMICOLON
@@ -110,18 +127,20 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             Type* retType = typeNode ? typeNode->type : NumberType::instance();
             delete typeNode;
             ASTNode* exprBody = RHS(8);
-            return new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, exprBody, true);
+            return attach_span(
+                new FunctionDeclNode(name, std::move(params), std::move(paramTypes), retType, exprBody, true),
+                merged_rhs_span(rhs));
         }
 
         // ========== Parameters ==========
-        case 10: return new ParamListNode({}, {});               // param_list_opt : ε
+        case 10: return attach_span(new ParamListNode({}, {}), merged_rhs_span(rhs)); // param_list_opt : ε
         case 11: PASS();                                          // param_list_opt : param_list
         case 12: { // param_list : IDENTIFIER COLON type
             std::string name = TOKEN(0);
             auto* typeNode = dynamic_cast<TypeNode*>(RHS(2));
             Type* type = typeNode ? typeNode->type : NumberType::instance();
             delete typeNode;
-            return new ParamListNode({name}, {type});
+            return attach_span(new ParamListNode({name}, {type}), merged_rhs_span(rhs));
         }
         case 13: { // param_list : param_list COMMA IDENTIFIER COLON type
             auto* left = dynamic_cast<ParamListNode*>(RHS(0));
@@ -134,31 +153,34 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             delete left;
             params.push_back(name);
             types.push_back(type);
-            return new ParamListNode(std::move(params), std::move(types));
+            return attach_span(new ParamListNode(std::move(params), std::move(types)), merged_rhs_span(rhs));
         }
 
         // ========== Types ==========
-        case 14: return new TypeNode(NumberType::instance());
-        case 15: return new TypeNode(BoolType::instance());
-        case 16: return new TypeNode(StringType::instance());
+        case 14: return attach_span(new TypeNode(NumberType::instance()), rhs[0].span);
+        case 15: return attach_span(new TypeNode(BoolType::instance()), rhs[0].span);
+        case 16: return attach_span(new TypeNode(StringType::instance()), rhs[0].span);
 
         // ========== Statements ==========
-        case 17: return new ExprStmtNode(RHS(0));            // statement : expr SEMICOLON
+        case 17: return attach_span(new ExprStmtNode(RHS(0)), merged_rhs_span(rhs)); // statement : expr SEMICOLON
         case 18: PASS();                                      // statement : block
         case 19: PASS();                                      // statement : return_stmt
         case 20: PASS();                                      // statement : if_stmt
 
         case 21: { // return_stmt : RETURN expr SEMICOLON
-            return new ReturnNode(RHS(1));
+            return attach_span(new ReturnNode(RHS(1)), merged_rhs_span(rhs));
         }
 
         case 22: { // block : L_CURL_BRACK statements R_CURL_BRACK
             if (auto* b = dynamic_cast<BlockNode*>(RHS(1))) {
                 auto v = std::move(b->stmts);
+                SourceSpan block_span = b->span;
                 delete b;
-                return new BlockNode(std::move(v));
+                return attach_span(new BlockNode(std::move(v)), block_span);
             } else {
-                return new BlockNode(RHS(1) ? std::vector{RHS(1)} : std::vector<ASTNode*>{});
+                return attach_span(
+                    new BlockNode(RHS(1) ? std::vector{RHS(1)} : std::vector<ASTNode*>{}),
+                    merged_rhs_span(rhs));
             }
         }
 
@@ -167,10 +189,10 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
 
         // ========== If statement ==========
         case 25: { // if_stmt : IF L_PAREN expr R_PAREN block
-            return new IfNode(RHS(2), RHS(4), nullptr);
+            return attach_span(new IfNode(RHS(2), RHS(4), nullptr), merged_rhs_span(rhs));
         }
         case 26: { // if_stmt : IF L_PAREN expr R_PAREN block ELSE block
-            return new IfNode(RHS(2), RHS(4), RHS(6));
+            return attach_span(new IfNode(RHS(2), RHS(4), RHS(6)), merged_rhs_span(rhs));
         }
 
         // ========== Expression forwarding ==========
@@ -209,16 +231,16 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         // ========== Primary ==========
         case 47: { // NUMBER
             long long v = parse_int(rhs[0].token_text);
-            return new NumberNode(v);
+            return attach_span(new NumberNode(v), rhs[0].span);
         }
         case 48: { // STRING
             std::string s = TOKEN(0);
             if (s.size() >= 2 && s.front() == '"' && s.back() == '"')
                 s = s.substr(1, s.size() - 2);
-            return new StringNode(s);
+            return attach_span(new StringNode(s), rhs[0].span);
         }
         case 49: // IDENTIFIER
-            return new VariableNode(TOKEN(0));
+            return attach_span(new VariableNode(TOKEN(0)), rhs[0].span);
         case 50: { // IDENTIFIER L_PAREN arg_list_opt R_PAREN  (llamada a función)
             std::string name = TOKEN(0);
             std::vector<ASTNode*> args;
@@ -226,18 +248,18 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
                 args = std::move(argBlock->stmts);
                 delete argBlock;
             } else if (RHS(2)) args.push_back(RHS(2));
-            return new FunctionCallNode(name, std::move(args));
+            return attach_span(new FunctionCallNode(name, std::move(args)), merged_rhs_span(rhs));
         }
         case 51: // L_PAREN expr R_PAREN
             return RHS(1);
 
         // ========== Let expression ==========
         case 52: // LET IDENTIFIER EQUAL expr IN expr
-            return new LetNode(TOKEN(1), RHS(3), RHS(5));
+            return attach_span(new LetNode(TOKEN(1), RHS(3), RHS(5)), merged_rhs_span(rhs));
 
         // ========== If expression ==========
         case 53: // IF L_PAREN expr R_PAREN expr ELSE expr
-            return new IfNode(RHS(2), RHS(4), RHS(6));
+            return attach_span(new IfNode(RHS(2), RHS(4), RHS(6)), merged_rhs_span(rhs));
 
         // ========== Call expression (obsoleta, mantenida por compatibilidad) ==========
         case 54: { // call_expr : IDENTIFIER L_PAREN arg_list_opt R_PAREN
@@ -247,7 +269,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
                 args = std::move(argBlock->stmts);
                 delete argBlock;
             } else if (RHS(2)) args.push_back(RHS(2));
-            return new FunctionCallNode(name, std::move(args));
+            return attach_span(new FunctionCallNode(name, std::move(args)), merged_rhs_span(rhs));
         }
 
         // ========== Argument lists ==========

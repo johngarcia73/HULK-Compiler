@@ -1,44 +1,53 @@
 #pragma once
-#include "visitor.hpp"
-#include "symbol_table.hpp"
-#include "dependency_graph.hpp"   // nuevo
-#include <vector>
-#include <string>
-#include <stack>
 
+#include <string>
+#include <vector>
+#include "dependency_graph.hpp"
+#include "diagnostics.hpp"
+#include "symbol_table.hpp"
+#include "visitor.hpp"
 
 class TypeInferenceVisitor : public Visitor {
     SemanticSymbolTable& symTable;
     DependencyGraph& depGraph;
-    std::vector<FunctionDeclNode*> pendingFunctions;  // declarations to process
-    std::vector<DepNode*> currentFuncStack;          // functions stack (for dependencies)
-    bool collecting;                                 // collector phase
-    std::vector<std::string> errors;
-    std::string currentFunctionName;
-    bool collectingDependencies = false; 
-    
-
-    void error(const std::string& msg) { errors.push_back(msg); }
-    void reportErrors() const;
-
-    // Use vector as a simple stack to avoid issues with std::stack/deque reallocations
+    SemanticContext& context;
+    std::vector<FunctionDeclNode*> pendingFunctions;
     std::vector<Type*> returnTypeStack;
+    bool collecting = false;
+    bool collectingDependencies = false;
+    std::string currentFunctionName;
+
+    void error(
+        SemanticPhase phase,
+        const ASTNode& node,
+        const std::string& message,
+        std::vector<std::string> notes = {});
+    void error(
+        SemanticPhase phase,
+        const SourceSpan& span,
+        const std::string& message,
+        std::vector<std::string> notes = {});
+    void traceInference(const std::string& message);
+    static Type* coerceUnknown(Type* type);
 
 public:
-    TypeInferenceVisitor(SemanticSymbolTable& table, DependencyGraph& graph)
-        : symTable(table), depGraph(graph), collecting(true) {}
+    TypeInferenceVisitor(
+        SemanticSymbolTable& table,
+        DependencyGraph& graph,
+        SemanticContext& semanticContext)
+        : symTable(table), depGraph(graph), context(semanticContext) {}
 
-    bool update(const std::string& name, const SymbolInfo& info);
-    void infer(ProgramNode* root);
-    bool hasErrors() const { return !errors.empty(); }
-    const std::vector<std::string>& getErrors() const { return errors; }
+    void collectDeclarations(ProgramNode* root);
+    void analyzeFunction(FunctionDeclNode* function);
+    void analyzeGlobals(ProgramNode* root);
+    const std::vector<FunctionDeclNode*>& getPendingFunctions() const { return pendingFunctions; }
+    bool hasErrors() const { return context.hasErrors(); }
 
-    // visit methods (todos los nodos del AST)
     Type* visit(ProgramNode& node) override;
     Type* visit(BlockNode& node) override;
     Type* visit(FunctionDeclNode& node) override;
-    Type *visit(ReturnNode &node);
-    Type *visit(LetNode &node) override;
+    Type* visit(ReturnNode& node) override;
+    Type* visit(LetNode& node) override;
     Type* visit(IfNode& node) override;
     Type* visit(FunctionCallNode& node) override;
     Type* visit(VariableNode& node) override;

@@ -35,6 +35,8 @@ std::vector<Token> Lexer::tokenize(const std::string& input) {
         int last_accept_state = -1;
         size_t last_accept_pos = pos;
         size_t i = pos;
+        size_t token_start_line = line;
+        size_t token_start_column = column;
 
         while (i < length) {
             char c = input[i];
@@ -59,7 +61,7 @@ std::vector<Token> Lexer::tokenize(const std::string& input) {
         int token_id = dfa.accept_token.at(last_accept_state);
         std::string lexeme = input.substr(pos, last_accept_pos - pos);
 
-        // Actualizar línea y columna para el próximo token
+        // Update line and coumn for the next token
         for (size_t j = pos; j < last_accept_pos; ++j) {
             if (input[j] == '\n') {
                 line++;
@@ -69,9 +71,16 @@ std::vector<Token> Lexer::tokenize(const std::string& input) {
             }
         }
 
-        // Si el token no es ignorado, lo añadimos
+        // If token is ignored, we left it
         if (!skip_table[token_id]) {
-            tokens.push_back(Token{static_cast<uint32_t>(token_id), lexeme, line, column});
+            tokens.push_back(Token{
+                static_cast<uint32_t>(token_id),
+                lexeme,
+                static_cast<int>(token_start_line),
+                static_cast<int>(token_start_column),
+                static_cast<int>(line),
+                static_cast<int>(column)
+            });
         }
 
         pos = last_accept_pos;

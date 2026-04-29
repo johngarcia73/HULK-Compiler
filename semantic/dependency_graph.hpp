@@ -30,6 +30,7 @@ struct DepNode {
 class DependencyGraph {
     std::unordered_map<std::string, std::unique_ptr<DepNode>> nodes;
     std::vector<DepNode*> topologicalOrder;
+    std::vector<std::string> cycleMessages;
 
 public:
     // Gets or creates a node with given name and types.
@@ -45,8 +46,9 @@ public:
     bool topologicalSort();
 
     // Prints graph for debug.
-    void dump() const;
+    void dump(std::ostream& out) const;
 
     const std::vector<DepNode*>& getTopologicalOrder() const { return topologicalOrder; }
     const std::vector<DepNode*>& getOrder() const { return topologicalOrder; }
+    const std::vector<std::string>& getCycleMessages() const { return cycleMessages; }
 };

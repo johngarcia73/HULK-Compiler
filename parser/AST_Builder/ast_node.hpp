@@ -2,12 +2,14 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include "../../common/source_span.hpp"
 #include "../../semantic/type.hpp"
 
 class Visitor;  // forward declaration
 
 struct ASTNode {
     Type* type = nullptr;   // inferred type
+    SourceSpan span;
     virtual ~ASTNode() = default;
     virtual void print(std::ostream &o, int indent = 0) const = 0;
     virtual Type* accept(Visitor& v) = 0; 
@@ -110,6 +112,8 @@ struct FunctionDeclNode : ASTNode {
     std::vector<std::string> params;
     std::vector<Type*> paramTypes;
     Type* returnType;
+    Type* declaredReturnType;
+    bool hasExplicitReturnType = false;
 
     ASTNodePtr body;       // nullptr if inline
     bool isInline;
@@ -150,6 +154,9 @@ struct IfNode : ASTNode {
 struct FunctionCallNode : ASTNode {
     std::string name;
     std::vector<ASTNodePtr> args;
+    FunctionType* resolvedFunctionType = nullptr;
+    std::string overloadStatus;
+    std::vector<std::string> overloadNotes;
     FunctionCallNode(std::string n, std::vector<ASTNodePtr> a);
     ~FunctionCallNode();
     void print(std::ostream& o, int indent_n = 0) const override;

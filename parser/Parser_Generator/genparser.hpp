@@ -82,7 +82,6 @@ inline void parse_production_line(
     trim(trimmed);
     if (trimmed.empty()) {
         spec.productions.push_back({lhs, {}});
-        std::cerr << "Debug: added epsilon production for " << lhs << "\n";
         return;
     }
 
@@ -136,7 +135,6 @@ inline void parse_production_line(
         if (alt.empty())
         {
             spec.productions.push_back({lhs, {}});
-            std::cerr << "Debug: added epsilon production for " << lhs << "\n";
             continue;
         }
 
@@ -350,16 +348,6 @@ inline Grammar build_grammar_from_spec(const GrammarSpec &spec)
     grammar.start_symbol = aug_id;
 
     grammar.build_indices();
-
-    const auto& prods = grammar.get_productions();
-    for (size_t i = 0; i < prods.size(); ++i) {
-        std::cout << "Prod " << i << ": " << grammar.symtab[prods[i].lhs].name << " ->";
-        for (auto s : prods[i].rhs) std::cout << " " << grammar.symtab[s].name;
-        std::cout << "\n";
-    }
-
-    // Debug output
-    std::cerr << "Total productions after augmentation: " << grammar.get_productions().size() << "\n";
 
     return grammar;
 }

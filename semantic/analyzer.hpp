@@ -1,44 +1,32 @@
 #pragma once
-#include "visitor.hpp"
-#include "symbol_table.hpp"
-#include <vector>
+
+#include <iostream>
 #include <string>
-#include <stack>
+#include <vector>
+#include "diagnostics.hpp"
+#include "symbol_table.hpp"
 
-class SemanticAnalyzer : public Visitor {
+struct ProgramNode;
+
+class SemanticAnalyzer {
     SemanticSymbolTable& symTable;
-    std::vector<std::string> errors;
+    SemanticAnalysisResult lastResult_;
+    std::vector<std::string> errors_;
 
-    void registerBuiltinFunctions();
-    void error(const std::string& msg) { errors.push_back(msg); }
+    void registerBuiltinFunctions(SemanticContext& context);
+    void refreshLegacyErrors();
 
 public:
-    SemanticAnalyzer(SemanticSymbolTable& table) : symTable(table) {}
+    explicit SemanticAnalyzer(SemanticSymbolTable& table) : symTable(table) {}
 
-    void reportErrors() const;
-    void analyze(ProgramNode* root);
-    bool hasErrors() const { return !errors.empty(); }
-    const std::vector<std::string>& getErrors() const { return errors; }
+    SemanticAnalysisResult analyze(
+        ProgramNode* root,
+        SemanticDebugOptions options = {});
+
+    void reportErrors(std::ostream& out = std::cerr) const;
+    bool hasErrors() const { return !lastResult_.success(); }
+    const std::vector<std::string>& getErrors() const { return errors_; }
+    const SemanticAnalysisResult& getResult() const { return lastResult_; }
 
     const SemanticSymbolTable& getSymbolTable() const { return symTable; }
-
-    // visit Methods(just check)
-    Type* visit(ProgramNode& node) override;
-    Type* visit(BlockNode& node) override;
-    Type* visit(FunctionDeclNode& node) override;
-    Type* visit(LetNode& node) override;
-    Type* visit(IfNode& node) override;
-    Type* visit(FunctionCallNode& node) override;
-    Type* visit(VariableNode& node) override;
-    Type* visit(NumberNode& node) override;
-    Type* visit(BoolNode& node) override;
-    Type* visit(StringNode& node) override;
-    Type* visit(BinaryOpNode& node) override;
-    Type* visit(UnaryOpNode& node) override;
-    Type* visit(ExprStmtNode& node) override;
-    Type* visit(ParamListNode& node) override;
-    Type* visit(LetBindingNode& node) override;
-    Type* visit(LetBindingsNode& node) override;
-    Type *visit(ReturnNode &node);
-    Type *visit(TypeNode &node) override;
 };

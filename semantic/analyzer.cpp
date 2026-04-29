@@ -1,268 +1,154 @@
-#include "visitor.hpp"
 #include "analyzer.hpp"
+
+#include <sstream>
+#include <unordered_set>
 #include "dependency_graph.hpp"
 #include "type_inference_visitor.hpp"
-#include <iostream>
 
+namespace {
 
-void SemanticAnalyzer::registerBuiltinFunctions() {
+std::vector<FunctionDeclNode*> buildOrderedFunctionList(
+    const DependencyGraph& graph,
+    const std::vector<FunctionDeclNode*>& pendingFunctions) {
+    std::vector<FunctionDeclNode*> orderedFunctions;
+    const auto& order = graph.getTopologicalOrder();
+    std::unordered_set<FunctionDeclNode*> added;
 
-    std::cerr << "DEBUG: registerBuiltinFunctions() called\n";
-    
+    for (DepNode* depNode : order) {
+        if (!depNode || depNode->kind != DepNodeKind::Function || !depNode->ast) {
+            continue;
+        }
+        auto* function = dynamic_cast<FunctionDeclNode*>(depNode->ast);
+        if (!function || added.count(function)) {
+            continue;
+        }
+        orderedFunctions.push_back(function);
+        added.insert(function);
+    }
 
-    // Ensure theres a global scope 
+    for (auto* function : pendingFunctions) {
+        if (!function || added.count(function)) {
+            continue;
+        }
+        orderedFunctions.push_back(function);
+    }
+
+    return orderedFunctions;
+}
+
+}  // namespace
+
+void SemanticAnalyzer::registerBuiltinFunctions(SemanticContext& context) {
+    context.tracePipeline("Registering builtin functions.");
+
     if (symTable.getCurrentLevel() == 0) {
         symTable.enterScope();
     }
 
-    // Math (Number -> Number)
+    auto insertBuiltin = [&](const std::string& name, FunctionType* type) {
+        symTable.insertFunction(name, type);
+        context.tracePipeline("Builtin registered: " + name + " : " + type->toString());
+    };
+
     auto mathType = new FunctionType({NumberType::instance()}, NumberType::instance());
-    symTable.insert("sin", {"sin", mathType, SemanticSymbolKind::Function, 0});
-    symTable.insert("cos", {"cos", mathType, SemanticSymbolKind::Function, 0});
-    symTable.insert("tan", {"tan", mathType, SemanticSymbolKind::Function, 0});
-    symTable.insert("abs", {"abs", mathType, SemanticSymbolKind::Function, 0});
-    symTable.insert("sqrt", {"sqrt", mathType, SemanticSymbolKind::Function, 0});
+    insertBuiltin("sin", mathType);
+    insertBuiltin("cos", mathType);
+    insertBuiltin("tan", mathType);
+    insertBuiltin("abs", mathType);
+    insertBuiltin("sqrt", mathType);
 
-    // input() -> String
-    auto inputType = new FunctionType({}, StringType::instance());
-    symTable.insert("input", {"input", inputType, SemanticSymbolKind::Function, 0});
+    insertBuiltin("input", new FunctionType({}, StringType::instance()));
+    insertBuiltin(
+        "_concat",
+        new FunctionType(
+            {StringType::instance(), StringType::instance()},
+            StringType::instance()));
 
-    // _concat(String, String) -> String
-    auto concatType = new FunctionType({StringType::instance(), StringType::instance()},
-                                       StringType::instance());
-    symTable.insert("_concat", {"_concat", concatType, SemanticSymbolKind::Function, 0});
-
-    // print (overloads)
-    std::vector<FunctionType*> printOverloads;
-    // print(Number)
-    printOverloads.push_back(new FunctionType({NumberType::instance()}, VoidType::instance()));
-    // print(String)
-    printOverloads.push_back(new FunctionType({StringType::instance()}, VoidType::instance()));
-    // print(Unknown)
-    printOverloads.push_back(new FunctionType({UnknownType::instance()}, VoidType::instance()));
-
-
-    SymbolInfo printInfo("print", printOverloads, SemanticSymbolKind::Function, 0);
-    symTable.insert("print", printInfo);
-
-    std::cerr << "DEBUG: built-ins registered\n";
+    insertBuiltin("print", new FunctionType({NumberType::instance()}, VoidType::instance()));
+    insertBuiltin("print", new FunctionType({StringType::instance()}, VoidType::instance()));
+    insertBuiltin("print", new FunctionType({UnknownType::instance()}, VoidType::instance()));
 }
 
-void SemanticAnalyzer::analyze(ProgramNode* root) {
-    registerBuiltinFunctions(); // First populate the symtab wth built-ins
+void SemanticAnalyzer::refreshLegacyErrors() {
+    errors_.clear();
+    for (const auto& diagnostic : lastResult_.diagnostics) {
+        if (diagnostic.severity == SemanticDiagnosticSeverity::Error) {
+            errors_.push_back(diagnostic.message);
+        }
+    }
+}
+
+SemanticAnalysisResult SemanticAnalyzer::analyze(
+    ProgramNode* root,
+    SemanticDebugOptions options) {
+    symTable.clear();
+    lastResult_ = {};
+    errors_.clear();
+
+    SemanticContext context(options);
+    if (!root) {
+        context.error(SemanticPhase::Pipeline, "Cannot analyze a null AST root.");
+        lastResult_ = context.buildResult();
+        refreshLegacyErrors();
+        return lastResult_;
+    }
+
+    registerBuiltinFunctions(context);
 
     DependencyGraph graph;
-    TypeInferenceVisitor inferencer(symTable, graph);
-    inferencer.infer(root);
+    TypeInferenceVisitor inferencer(symTable, graph, context);
 
-    if (inferencer.hasErrors()) {
-        for (const auto& err : inferencer.getErrors()) {
-            error(err);
-        }
-        // Maybe continue to detect more errors?
-    }
+    context.tracePipeline("Collecting declarations and dependencies.");
+    inferencer.collectDeclarations(root);
 
-    if (!hasErrors()) root->accept(*this);
-    
-    reportErrors();
-}
-
-void SemanticAnalyzer::reportErrors() const {
-    for (const auto& e : errors) {
-        std::cerr << "Semantic error: " << e << "\n";
-    }
-    if (errors.empty()) {
-        std::cout << "Semantic analysis successful.\n";
-    }
-}
-
-Type* SemanticAnalyzer::visit(ProgramNode& node) {
-    for (auto* decl : node.decls) decl->accept(*this);
-    for (auto* stmt : node.stmts) stmt->accept(*this);
-    return nullptr;
-}
-
-Type* SemanticAnalyzer::visit(BlockNode& node) {
-    symTable.enterScope();
-    for (auto* stmt : node.stmts) stmt->accept(*this);
-    symTable.exitScope();
-    return nullptr;
-}
-Type* SemanticAnalyzer::visit(FunctionDeclNode& node) {
-    SymbolInfo* existing = symTable.lookup(node.name);
-    if (existing && existing->scopeLevel == 0 && existing->kind == SemanticSymbolKind::Function) {
-        error("Cannot redeclare built-in function '" + node.name + "'");
-        return nullptr;
-    }
-    
-    if (!existing || existing->kind != SemanticSymbolKind::Function) {
-        error("Function '" + node.name + "' not found in symbol table");
-        return nullptr;
-    }
-
-    Type* actualReturnType = nullptr;
-    if (node.isInline) {
-        if (!node.exprBody) {
-            error("Inline function '" + node.name + "' has no expression body");
-            return nullptr;
-        }
-        actualReturnType = node.exprBody->type;
+    std::vector<FunctionDeclNode*> orderedFunctions = inferencer.getPendingFunctions();
+    if (!graph.topologicalSort()) {
+        context.warning(
+            SemanticPhase::Dependencies,
+            "Dependency cycle detected; falling back to declaration order.",
+            {},
+            graph.getCycleMessages());
     } else {
-        if (!node.body) {
-            error("Function '" + node.name + "' has no body");
-            return nullptr;
-        }
-        actualReturnType = node.body->type;
+        orderedFunctions = buildOrderedFunctionList(graph, inferencer.getPendingFunctions());
     }
 
-    if (!actualReturnType) actualReturnType = VoidType::instance();
-    Type* declaredReturnType = node.returnType ? node.returnType : VoidType::instance();
-
-    if (!declaredReturnType->equals(actualReturnType)) {
-        error("Return type mismatch in function '" + node.name + "': declared " +
-              declaredReturnType->toString() + " but body returns " +
-              actualReturnType->toString());
-        return nullptr;
+    context.tracePipeline(
+        "Analyzing " + std::to_string(orderedFunctions.size()) + " function body/bodies.");
+    for (auto* function : orderedFunctions) {
+        inferencer.analyzeFunction(function);
     }
-    return nullptr;
+
+    context.tracePipeline("Analyzing global statements.");
+    inferencer.analyzeGlobals(root);
+
+    if (options.dump_dependency_graph) {
+        std::ostringstream out;
+        graph.dump(out);
+        context.addDump("dependency-graph", out.str());
+    }
+
+    if (options.dump_symbols) {
+        std::ostringstream out;
+        symTable.dump(out);
+        context.addDump("symbols", out.str());
+    }
+
+    if (options.dump_ast) {
+        std::ostringstream out;
+        root->print(out);
+        context.addDump("ast", out.str());
+    }
+
+    lastResult_ = context.buildResult();
+    refreshLegacyErrors();
+    return lastResult_;
 }
 
-Type* SemanticAnalyzer::visit(LetNode& node) {
-    // New scope for let body
-    symTable.enterScope();
-
-    // Get the variable type from initialization (already inferred)
-    Type* varType = node.init->type;
-    if (!varType) {
-        error("Variable '" + node.name + "' no tiene tipo inferido.");
-    } else {
-        SymbolInfo varInfo{node.name, varType, SemanticSymbolKind::Variable, symTable.getCurrentLevel()};
-        if (!symTable.insert(node.name, varInfo)) {
-            error("Variable '" + node.name + "' ya declarada en este ámbito.");
-        }
+void SemanticAnalyzer::reportErrors(std::ostream& out) const {
+    for (const auto& trace : lastResult_.traces) {
+        out << trace << "\n";
     }
-
-    // Check the body
-    node.body->accept(*this);
-
-    // Exit body scope
-    symTable.exitScope();
-
-    return nullptr;
-}
-Type* SemanticAnalyzer::visit(IfNode& node) {
-    Type* condType = node.condition->type;
-
-    if (!condType || condType->equals(UnknownType::instance())) {
-        error("If condition has no valid type.");
-        return nullptr;
+    for (const auto& diagnostic : lastResult_.diagnostics) {
+        out << diagnostic.format() << "\n";
     }
-
-    if (!condType->equals(BoolType::instance())) {
-        error("If condition must be boolean.");
-    }
-
-    node.then_branch->accept(*this);
-    node.else_branch->accept(*this);
-    return nullptr;
-}
-
-Type* SemanticAnalyzer::visit(FunctionCallNode& node) {
-    std::vector<Type*> argTypes;
-    for (auto* arg : node.args) {
-        if (!arg->type) {
-            error("Argument has no type");
-            return nullptr;
-        }
-        argTypes.push_back(arg->type);
-    }
-    FunctionType* funcType = symTable.lookupFunction(node.name, argTypes);
-    if (!funcType) {
-        error("No matching function for '" + node.name + "'");
-        return nullptr;
-    }
-    node.type = funcType->getReturnType();
-    return node.type;
-}
-
-
-Type* SemanticAnalyzer::visit(VariableNode& node) {
-    // Variable must b in table (already verified at inference)
-    SymbolInfo* sym = symTable.lookup(node.name);
-    if (!sym) {
-        error("Variable '" + node.name + "' not declared.");
-    }
-    return nullptr;
-}
-
-Type* SemanticAnalyzer::visit(BinaryOpNode& node) {
-    // Verify operands have the correct type acoording to operator
-    Type* left = node.left->type;
-    Type* right = node.right->type;
-    if (!left || !right) {
-        error("Typeless operand (inference error).");
-        return nullptr;
-    }
-
-    if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/") {
-        if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
-            error("arithmetic operadrands require Number operands.");
-        }
-    } else if (node.op == "<" || node.op == ">" || node.op == "<=" || node.op == ">=") {
-        if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
-            error("relactional operands require Number operands.");
-        }
-    } else if (node.op == "==") {
-        if (!left->equals(right)) {
-            error("Operador '==' requires same type operands.");
-        }
-    } else if (node.op == "@") {
-        if (!left->equals(StringType::instance()) || !right->equals(StringType::instance())) {
-            error("Operator '@' requires one String operand.");
-        }
-    } else {
-        error("Binary operator not supported.");
-    }
-    return nullptr;
-}
-
-Type* SemanticAnalyzer::visit(UnaryOpNode& node) {
-    Type* operand = node.operand->type;
-    if (!operand) {
-        error("Typeless operand (inference error).");
-        return nullptr;
-    }
-    if (node.op == "-") {
-        if (!operand->equals(NumberType::instance())) {
-            error("Unary operator '!' requires Number operands.");
-        }
-    } else if (node.op == "!") {
-        if (!operand->equals(BoolType::instance())) {
-            error("Unary operator '!' requires Boolean operands.");
-        }
-    } else {
-        error("Unary operator not supported");
-    }
-    return nullptr;
-}
-
-Type* SemanticAnalyzer::visit(ExprStmtNode& node) {
-    node.expr->accept(*this);
-    return nullptr;
-}
-
-Type* SemanticAnalyzer::visit(TypeNode& node) {
-    return nullptr;
-}
-
-// Aux nodes
-Type* SemanticAnalyzer::visit(NumberNode& node) { return nullptr; }
-Type* SemanticAnalyzer::visit(BoolNode& node) { return nullptr; }
-Type* SemanticAnalyzer::visit(StringNode& node) { return nullptr; }
-Type* SemanticAnalyzer::visit(ParamListNode& node) { return nullptr; }
-Type* SemanticAnalyzer::visit(LetBindingNode& node) { return nullptr; }
-Type* SemanticAnalyzer::visit(LetBindingsNode& node) { return nullptr; }
-
-Type* SemanticAnalyzer::visit(ReturnNode& node) {
-    return nullptr;
 }

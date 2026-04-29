@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <vector>
 #include <iostream>
+#include <sstream>
 #include "type.hpp"
 
 using namespace std;
@@ -35,10 +36,133 @@ struct SymbolInfo {
         : name(n), overloads(ov), type(ov.empty() ? nullptr : ov[0]), kind(k), scopeLevel(level) {}
 };
 
+enum class OverloadResolutionStatus {
+    Resolved,
+    SymbolNotFound,
+    NotAFunction,
+    ArityMismatch,
+    TypeMismatch,
+    Ambiguous
+};
+
+struct OverloadCandidateReport {
+    FunctionType* candidate = nullptr;
+    bool matched = false;
+    bool arityMatched = false;
+    std::vector<std::string> reasons;
+};
+
+struct OverloadResolutionResult {
+    OverloadResolutionStatus status = OverloadResolutionStatus::SymbolNotFound;
+    FunctionType* selected = nullptr;
+    std::vector<OverloadCandidateReport> candidates;
+
+    std::string statusString() const {
+        switch (status) {
+            case OverloadResolutionStatus::Resolved:
+                return "resolved";
+            case OverloadResolutionStatus::SymbolNotFound:
+                return "symbol-not-found";
+            case OverloadResolutionStatus::NotAFunction:
+                return "not-a-function";
+            case OverloadResolutionStatus::ArityMismatch:
+                return "arity-mismatch";
+            case OverloadResolutionStatus::TypeMismatch:
+                return "type-mismatch";
+            case OverloadResolutionStatus::Ambiguous:
+                return "ambiguous";
+        }
+        return "symbol-not-found";
+    }
+
+    std::string messageFor(const std::string& name) const {
+        switch (status) {
+            case OverloadResolutionStatus::Resolved:
+                return "Resolved overload for '" + name + "'";
+            case OverloadResolutionStatus::SymbolNotFound:
+                return "Function '" + name + "' not found.";
+            case OverloadResolutionStatus::NotAFunction:
+                return "'" + name + "' is not callable.";
+            case OverloadResolutionStatus::ArityMismatch:
+                return "No overload of '" + name + "' accepts this number of arguments.";
+            case OverloadResolutionStatus::TypeMismatch:
+                return "No overload of '" + name + "' matches the argument types.";
+            case OverloadResolutionStatus::Ambiguous:
+                return "Call to '" + name + "' is ambiguous.";
+        }
+        return "Function '" + name + "' not found.";
+    }
+
+    std::vector<std::string> notesFor(const std::string& name) const {
+        std::vector<std::string> notes;
+        if (status == OverloadResolutionStatus::Resolved && selected) {
+            notes.push_back("Selected overload: " + selected->toString());
+        }
+        for (const auto& candidate : candidates) {
+            if (!candidate.candidate) {
+                continue;
+            }
+            if (candidate.matched) {
+                notes.push_back("Candidate " + candidate.candidate->toString() + " matched.");
+                continue;
+            }
+            if (candidate.reasons.empty()) {
+                notes.push_back("Candidate " + candidate.candidate->toString() + " did not match.");
+                continue;
+            }
+            for (const auto& reason : candidate.reasons) {
+                notes.push_back("Candidate " + candidate.candidate->toString() + ": " + reason);
+            }
+        }
+        if (notes.empty() && status != OverloadResolutionStatus::Resolved) {
+            notes.push_back("No viable candidates found for '" + name + "'.");
+        }
+        return notes;
+    }
+};
+
 class SemanticSymbolTable {
     std::vector<std::unordered_map<std::string, SymbolInfo>> scopes;
     int currentLevel = 0;
+
+    static bool areTypesCompatible(Type* paramType, Type* argType) {
+        if (!paramType || !argType) {
+            return false;
+        }
+        if (paramType->equals(AnyType::instance()) || argType->equals(AnyType::instance())) {
+            return true;
+        }
+        if (paramType->equals(UnknownType::instance()) || argType->equals(UnknownType::instance())) {
+            return true;
+        }
+        return paramType->equals(argType);
+    }
+
+    static int compatibilityCost(Type* paramType, Type* argType) {
+        if (!paramType || !argType) {
+            return 1000;
+        }
+        if (paramType->equals(argType)) {
+            return 0;
+        }
+        if (paramType->equals(AnyType::instance())) {
+            return 3;
+        }
+        if (paramType->equals(UnknownType::instance())) {
+            return 2;
+        }
+        if (argType->equals(AnyType::instance()) || argType->equals(UnknownType::instance())) {
+            return 1;
+        }
+        return 1000;
+    }
+
 public:
+    void clear() {
+        scopes.clear();
+        currentLevel = 0;
+    }
+
     void enterScope() {
         scopes.emplace_back();
         ++currentLevel;
@@ -105,41 +229,118 @@ public:
     }
     
     // For debgging
-    void dump() const {
-        std::cout << "Symbol table (scopes: " << scopes.size() << ")\n";
+    void dump(std::ostream& out) const {
+        out << "Symbol table (scopes: " << scopes.size() << ")\n";
         for (size_t i = 0; i < scopes.size(); ++i) {
-            std::cout << "  Scope " << i << ":\n";
+            out << "  Scope " << i << ":\n";
             for (const auto& [name, info] : scopes[i]) {
-                std::cout << "    " << name << " : ";
+                out << "    " << name << " : ";
                 if (info.kind == SemanticSymbolKind::Function && info.overloads.size() > 1) {
                     for (auto* ft : info.overloads) {
-                        std::cout << ft->toString() << " ";
+                        out << ft->toString() << " ";
                     }
                 } else if (info.type) {
-                    std::cout << info.type->toString();
+                    out << info.type->toString();
                 } else {
-                    std::cout << "unknown";
+                    out << "unknown";
                 }
-                std::cout << " (kind=" << static_cast<int>(info.kind) << ")\n";
+                out << " (kind=" << static_cast<int>(info.kind) << ")\n";
             }
         }
     }
 
-    FunctionType* lookupFunction(const std::string& name, const std::vector<Type*>& argTypes) {
-        SymbolInfo* info = lookup(name); 
-        if (!info || info->kind != SemanticSymbolKind::Function) return nullptr;
+    OverloadResolutionResult resolveFunction(const std::string& name, const std::vector<Type*>& argTypes) {
+        OverloadResolutionResult result;
+        SymbolInfo* info = lookup(name);
+        if (!info) {
+            result.status = OverloadResolutionStatus::SymbolNotFound;
+            return result;
+        }
+        if (info->kind != SemanticSymbolKind::Function) {
+            result.status = OverloadResolutionStatus::NotAFunction;
+            return result;
+        }
+
+        std::vector<std::pair<FunctionType*, int>> matchedCandidates;
+        bool sawArityMatch = false;
+
         for (auto* ft : info->overloads) {
+            OverloadCandidateReport candidate;
+            candidate.candidate = ft;
+
             const auto& params = ft->getParamTypes();
-            if (params.size() != argTypes.size()) continue;
+            if (params.size() != argTypes.size()) {
+                std::ostringstream os;
+                os << "expected " << params.size() << " argument(s) but got " << argTypes.size();
+                candidate.reasons.push_back(os.str());
+                result.candidates.push_back(std::move(candidate));
+                continue;
+            }
+
+            candidate.arityMatched = true;
+            sawArityMatch = true;
             bool match = true;
+            int score = 0;
+
             for (size_t i = 0; i < params.size(); ++i) {
-                if (!params[i]->equals(argTypes[i])) {
-                    match = false;
-                    break;
+                if (areTypesCompatible(params[i], argTypes[i])) {
+                    score += compatibilityCost(params[i], argTypes[i]);
+                    continue;
+                }
+                match = false;
+                std::ostringstream os;
+                os << "argument " << (i + 1) << " expected " << params[i]->toString()
+                   << " but got " << (argTypes[i] ? argTypes[i]->toString() : std::string("<null>"));
+                candidate.reasons.push_back(os.str());
+            }
+
+            candidate.matched = match;
+            if (match) {
+                matchedCandidates.push_back({ft, score});
+            }
+            result.candidates.push_back(std::move(candidate));
+        }
+
+        if (matchedCandidates.size() == 1) {
+            result.status = OverloadResolutionStatus::Resolved;
+            result.selected = matchedCandidates.front().first;
+            return result;
+        }
+        if (matchedCandidates.size() > 1) {
+            int bestScore = matchedCandidates.front().second;
+            for (const auto& candidate : matchedCandidates) {
+                bestScore = std::min(bestScore, candidate.second);
+            }
+
+            std::vector<FunctionType*> bestCandidates;
+            for (const auto& candidate : matchedCandidates) {
+                if (candidate.second == bestScore) {
+                    bestCandidates.push_back(candidate.first);
                 }
             }
-            if (match) return ft;
+
+            if (bestCandidates.size() == 1) {
+                result.status = OverloadResolutionStatus::Resolved;
+                result.selected = bestCandidates.front();
+                return result;
+            }
+
+            result.status = OverloadResolutionStatus::Ambiguous;
+            for (auto& candidate : result.candidates) {
+                if (candidate.matched && candidate.candidate) {
+                    candidate.reasons.push_back("candidate remained viable");
+                }
+            }
+            return result;
         }
-        return nullptr;
+
+        result.status = sawArityMatch
+            ? OverloadResolutionStatus::TypeMismatch
+            : OverloadResolutionStatus::ArityMismatch;
+        return result;
+    }
+
+    FunctionType* lookupFunction(const std::string& name, const std::vector<Type*>& argTypes) {
+        return resolveFunction(name, argTypes).selected;
     }
 };

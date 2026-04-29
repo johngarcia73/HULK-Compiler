@@ -132,7 +132,9 @@ ParseResult LALRParser::run_parser(const std::vector<Token>& tokens)
             current_symbol = _dollar_symbol;
             current_token = Token(_dollar_symbol, "$", 
                                   tokens.empty() ? 0 : tokens.back().line,
-                                  tokens.empty() ? 0 : tokens.back().column);
+                                  tokens.empty() ? 0 : tokens.back().column,
+                                  tokens.empty() ? 0 : tokens.back().end_line,
+                                  tokens.empty() ? 0 : tokens.back().end_column);
         }
         
         // Look up action in ACTION table
@@ -179,7 +181,7 @@ ParseResult LALRParser::run_parser(const std::vector<Token>& tokens)
             
             // If we have a builder, push a Value containing the token text
             if (_builder) {
-                value_stack.push_back(Value::from_text(current_token.value));
+                value_stack.push_back(Value::from_token(current_token));
             }
             
             token_idx++;
