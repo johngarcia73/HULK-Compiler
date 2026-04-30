@@ -27,7 +27,8 @@ void test_semantic(TestRunner& r) {
     auto* square_decl =
         new FunctionDeclNode("square", params, param_types, nullptr, square_body, true);
 
-    auto* square_call = new FunctionCallNode("square", {new NumberNode(5)});
+    auto* square_call =
+        new FunctionCallNode("square", {new NumberNode("5", NumberKind::Int)});
     auto* print_call = new FunctionCallNode("print", {square_call});
     auto* stmt = new ExprStmtNode(print_call);
 
@@ -66,4 +67,24 @@ void test_semantic(TestRunner& r) {
     }
 
     delete prog;
+
+    NumberNode float_number("3.5f", classify_number_kind("3.5f"));
+    EXPECT_TRUE(r, float_number.kind == NumberKind::Float);
+    EXPECT_TRUE(r, float_number.isWellFormed());
+
+    NumberNode double_number("7d", classify_number_kind("7d"));
+    EXPECT_TRUE(r, double_number.kind == NumberKind::Double);
+    EXPECT_TRUE(r, double_number.isWellFormed());
+
+    ProgramNode* malformed_prog =
+        new ProgramNode({}, {new ExprStmtNode(new NumberNode("3.14f", NumberKind::Int))});
+
+    SemanticSymbolTable malformed_table;
+    SemanticAnalyzer malformed_analyzer(malformed_table);
+    SemanticAnalysisResult malformed_res = malformed_analyzer.analyze(malformed_prog);
+
+    EXPECT_TRUE(r, !malformed_res.success());
+    EXPECT_TRUE(r, malformed_analyzer.hasErrors());
+
+    delete malformed_prog;
 }

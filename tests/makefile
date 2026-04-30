@@ -19,8 +19,6 @@ SRCS = \
     ../lexer/Lexer_Generator/preprocessor.cpp \
     ../semantic/analyzer.cpp \
     ../semantic/type_inference_visitor.cpp \
-    ../ir_generator/llvm_ir_generator.cpp \
-    ../ir_generator/llvm_ir_executor.cpp \
     ../semantic/dependency_graph.cpp \
     pipeline_test.cpp
 

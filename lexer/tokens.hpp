@@ -126,7 +126,7 @@ inline std::vector<TokenSpec> default_token_specs() {
 
         { TokenType::TOKEN_STRING,   R"("([^"\\]|\\.)*")", false },
 
-        { TokenType::TOKEN_NUMBER,   "[0-9]+", false },
+        { TokenType::TOKEN_NUMBER,   "[0-9]+|[0-9]+\\.[0-9]+", false },
 
         // Operators and symbols
         { TokenType::TOKEN_PLUS,     "\\+", false },

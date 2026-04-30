@@ -22,6 +22,11 @@ function max(x: Number, y: Number): Number {
     }
 }
 
+function ex(x:Number): Number{
+    123 + 123.4;
+    return 0;
+}
+
 let a = 5 in let b = 12 in let sum = a+b in print(sum);
 
 let msg = "The sum is: " @ "a" in print(msg);

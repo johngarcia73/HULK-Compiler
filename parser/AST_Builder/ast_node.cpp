@@ -38,16 +38,115 @@ std::string function_signature(
     return os.str();
 }
 
+bool has_number_suffix(char ch) {
+    return ch == 'f' || ch == 'F' || ch == 'd' || ch == 'D';
+}
+
+std::string strip_number_suffix(const std::string& literal) {
+    if (!literal.empty() && has_number_suffix(literal.back())) {
+        return literal.substr(0, literal.size() - 1);
+    }
+    return literal;
+}
+
 }  // namespace
+
+const char* number_kind_name(NumberKind kind) {
+    switch (kind) {
+        case NumberKind::Int:
+            return "int";
+        case NumberKind::Float:
+            return "float";
+        case NumberKind::Double:
+            return "double";
+    }
+    return "int";
+}
+
+NumberKind classify_number_kind(const std::string& literal) {
+    if (!literal.empty()) {
+        if (literal.back() == 'f' || literal.back() == 'F') {
+            return NumberKind::Float;
+        }
+        if (literal.back() == 'd' || literal.back() == 'D') {
+            return NumberKind::Double;
+        }
+    }
+
+    if (literal.find('.') != std::string::npos ||
+        literal.find('e') != std::string::npos ||
+        literal.find('E') != std::string::npos) {
+        return NumberKind::Double;
+    }
+
+    return NumberKind::Int;
+}
 
 // ------------------------------------------------------------
 // NumberNode
 // ------------------------------------------------------------
-NumberNode::NumberNode(long long v) : value(v) {}
+NumberNode::NumberNode(const std::string& v, NumberKind kind_)
+    : value(v), kind(kind_) {}
+
+std::string NumberNode::kindName() const {
+    return number_kind_name(kind);
+}
+
+std::optional<long long> NumberNode::tryAsInt() const {
+    if (kind != NumberKind::Int) {
+        return std::nullopt;
+    }
+
+    const std::string numeric_text = strip_number_suffix(value);
+    if (numeric_text.empty()) {
+        return std::nullopt;
+    }
+
+    try {
+        size_t parsed = 0;
+        const long long result = std::stoll(numeric_text, &parsed, 10);
+        if (parsed != numeric_text.size()) {
+            return std::nullopt;
+        }
+        return result;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+std::optional<double> NumberNode::tryAsDouble() const {
+    const std::string numeric_text = strip_number_suffix(value);
+    if (numeric_text.empty()) {
+        return std::nullopt;
+    }
+
+    try {
+        size_t parsed = 0;
+        const double result = std::stod(numeric_text, &parsed);
+        if (parsed != numeric_text.size()) {
+            return std::nullopt;
+        }
+        return result;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+bool NumberNode::isWellFormed() const {
+    return kind == NumberKind::Int ? tryAsInt().has_value() : tryAsDouble().has_value();
+}
+
+long long NumberNode::asInt() const {
+    return tryAsInt().value_or(0);
+}
+
+double NumberNode::asDouble() const {
+    return tryAsDouble().value_or(0.0);
+}
 
 void NumberNode::print(std::ostream &o, int indent_n) const {
     indent(o, indent_n);
-    o << "Number(" << value << ")";
+    o << "Number(" << value << " : " << kindName() << ")";
     print_metadata(o, *this);
     o << "\n";
 }

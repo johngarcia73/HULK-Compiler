@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <string>
 #include <vector>
 #include <iostream>
@@ -25,9 +26,25 @@ inline void indent(std::ostream &o, int n) {
 // Basic nodes
 // ============================================================================
 
+enum class NumberKind {
+    Int,
+    Float,
+    Double
+};
+
+const char* number_kind_name(NumberKind kind);
+NumberKind classify_number_kind(const std::string& literal);
+
 struct NumberNode : ASTNode {
-    long long value;
-    NumberNode(long long v);
+    std::string value;
+    NumberKind kind;
+    NumberNode(const std::string& v, NumberKind kind = NumberKind::Int);
+    std::string kindName() const;
+    std::optional<long long> tryAsInt() const;
+    std::optional<double> tryAsDouble() const;
+    bool isWellFormed() const;
+    long long asInt() const;
+    double asDouble() const;
     void print(std::ostream &o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
 };

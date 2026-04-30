@@ -26,7 +26,6 @@
 %left CONCAT
 %left PLUS MINUS
 %left STAR SLASH
-%nonassoc IFX
 %nonassoc ELSE
 
 %%
@@ -68,7 +67,7 @@ block : L_CURL_BRACK statements R_CURL_BRACK
 statements : /* empty */
            | statements statement
 
-if_stmt : IF L_PAREN expr R_PAREN block %prec IFX
+if_stmt : IF L_PAREN expr R_PAREN block
         | IF L_PAREN expr R_PAREN block ELSE block
 
 expr : relational
@@ -106,7 +105,8 @@ primary : NUMBER
 
 let_expr : LET IDENTIFIER EQUAL expr IN expr
 
-if_expr : IF L_PAREN expr R_PAREN expr ELSE expr
+if_expr : IF L_PAREN expr R_PAREN expr
+        | IF L_PAREN expr R_PAREN expr ELSE expr
 
 /* call_expr se mantiene por compatibilidad con el AST builder,
    pero ya no es alcanzable desde expr. */

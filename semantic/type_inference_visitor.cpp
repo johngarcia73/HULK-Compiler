@@ -366,6 +366,13 @@ Type* TypeInferenceVisitor::visit(VariableNode& node) {
 
 Type* TypeInferenceVisitor::visit(NumberNode& node) {
     if (!collecting) {
+        if (!node.isWellFormed()) {
+            error(
+                SemanticPhase::Inference,
+                node,
+                "Malformed numeric literal '" + node.value + "'.",
+                {"Number kind: " + node.kindName()});
+        }
         node.type = NumberType::instance();
         return node.type;
     }

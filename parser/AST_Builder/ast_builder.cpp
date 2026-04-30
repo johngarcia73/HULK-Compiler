@@ -4,11 +4,20 @@
 #include <iostream>
 #include <algorithm>
 
-// Utility functions
-static long long parse_int(const std::optional<std::string>& s) {
-    if (!s) return 0;
-    try { return std::stoll(*s); }
-    catch(...) { return 0; }
+struct ParsedNumber {
+    std::string value = "0";
+    NumberKind kind = NumberKind::Int;
+};
+
+static ParsedNumber parse_number(const std::optional<std::string>& s) {
+    if (!s) {
+        return {};
+    }
+
+    ParsedNumber parsed;
+    parsed.value = *s;
+    parsed.kind = classify_number_kind(parsed.value);
+    return parsed;
 }
 
 static Type* tokenToType(const Value& v) {
@@ -35,6 +44,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         case 0: { // program : top_level_items
             if (auto* block = dynamic_cast<BlockNode*>(RHS(0))) {
                 auto items = std::move(block->stmts);
+                const SourceSpan program_span = block->span;
                 delete block;
                 std::vector<ASTNode*> decls;
                 std::vector<ASTNode*> stmts;
@@ -44,7 +54,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
                     else
                         stmts.push_back(item);
                 }
-                return attach_span(new ProgramNode(std::move(decls), std::move(stmts)), block->span);
+                return attach_span(new ProgramNode(std::move(decls), std::move(stmts)), program_span);
             }
             return attach_span(new ProgramNode({}, {}), merged_rhs_span(rhs));
         }
@@ -230,8 +240,8 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
 
         // ========== Primary ==========
         case 47: { // NUMBER
-            long long v = parse_int(rhs[0].token_text);
-            return attach_span(new NumberNode(v), rhs[0].span);
+            const ParsedNumber number = parse_number(rhs[0].token_text);
+            return attach_span(new NumberNode(number.value, number.kind), rhs[0].span);
         }
         case 48: { // STRING
             std::string s = TOKEN(0);
@@ -258,11 +268,13 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             return attach_span(new LetNode(TOKEN(1), RHS(3), RHS(5)), merged_rhs_span(rhs));
 
         // ========== If expression ==========
-        case 53: // IF L_PAREN expr R_PAREN expr ELSE expr
+        case 53: // IF L_PAREN expr R_PAREN expr
+            return attach_span(new IfNode(RHS(2), RHS(4), nullptr), merged_rhs_span(rhs));
+        case 54: // IF L_PAREN expr R_PAREN expr ELSE expr
             return attach_span(new IfNode(RHS(2), RHS(4), RHS(6)), merged_rhs_span(rhs));
 
-        // ========== Call expression (obsoleta, mantenida por compatibilidad) ==========
-        case 54: { // call_expr : IDENTIFIER L_PAREN arg_list_opt R_PAREN
+        // ========== Call expression (obsolete, kept for compatibility) ==========
+        case 55: { // call_expr : IDENTIFIER L_PAREN arg_list_opt R_PAREN
             std::string name = TOKEN(0);
             std::vector<ASTNode*> args;
             if (auto* argBlock = dynamic_cast<BlockNode*>(RHS(2))) {
@@ -273,13 +285,13 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         }
 
         // ========== Argument lists ==========
-        case 55: EMPTY_BLOCK();          // arg_list_opt : ε
-        case 56: PASS();                 // arg_list_opt : arg_list
-        case 57: BUILD_ARG_LIST(RHS(0)); // arg_list -> expr
-        case 58: BUILD_BLOCK(RHS(0), RHS(2)); // arg_list -> arg_list COMMA expr
+        case 56: EMPTY_BLOCK();          // arg_list_opt : ε
+        case 57: PASS();                 // arg_list_opt : arg_list
+        case 58: BUILD_ARG_LIST(RHS(0)); // arg_list -> expr
+        case 59: BUILD_BLOCK(RHS(0), RHS(2)); // arg_list -> arg_list COMMA expr
 
         // ========== Dummy production (program') ==========
-        case 59: // program' -> program
+        case 60: // program' -> program
             return RHS(0);
 
         default:
