@@ -31,6 +31,8 @@ struct NumberNode : ASTNode {
     NumberNode(const std::string& v, const std::string& kind = "int");
     long long asInt() const;
     double asDouble() const;
+    bool isWellFormed() const;
+    std::string kindName() const;
     void print(std::ostream &o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
 };

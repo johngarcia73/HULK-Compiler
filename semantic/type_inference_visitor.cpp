@@ -449,11 +449,16 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
     }
 
     if (node.op == "@") {
-        if (!left->equals(StringType::instance()) || !right->equals(StringType::instance())) {
+        auto is_concat_operand = [](Type* type) {
+            return type->equals(StringType::instance()) ||
+                   type->equals(NumberType::instance());
+        };
+
+        if (!is_concat_operand(left) || !is_concat_operand(right)) {
             error(
                 SemanticPhase::Inference,
                 node,
-                "Operator '@' requires String operands.",
+                "Operator '@' requires String or Number operands.",
                 {"Left operand: " + left->toString(), "Right operand: " + right->toString()});
         }
         node.type = StringType::instance();

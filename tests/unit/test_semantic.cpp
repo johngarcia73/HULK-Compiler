@@ -29,9 +29,14 @@ void test_semantic(TestRunner& r) {
 
     auto* square_call = new FunctionCallNode("square", {new NumberNode("5")});
     auto* print_call = new FunctionCallNode("print", {square_call});
+    auto* concat_expr = new BinaryOpNode(
+        "@",
+        new StringNode("The meaning of life is "),
+        new NumberNode("42"));
+    auto* concat_stmt = new ExprStmtNode(concat_expr);
     auto* stmt = new ExprStmtNode(print_call);
 
-    ProgramNode* prog = new ProgramNode({square_decl}, {stmt});
+    ProgramNode* prog = new ProgramNode({square_decl}, {concat_stmt, stmt});
 
     SemanticSymbolTable table;
     SemanticAnalyzer analyzer(table);
@@ -58,6 +63,10 @@ void test_semantic(TestRunner& r) {
     EXPECT_TRUE(r, square_call->type != nullptr);
     if (square_call->type) {
         EXPECT_TRUE(r, square_call->type->equals(NumberType::instance()));
+    }
+    EXPECT_TRUE(r, concat_expr->type != nullptr);
+    if (concat_expr->type) {
+        EXPECT_TRUE(r, concat_expr->type->equals(StringType::instance()));
     }
     EXPECT_TRUE(r, print_call->resolvedFunctionType != nullptr);
     EXPECT_TRUE(r, print_call->type != nullptr);

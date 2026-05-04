@@ -103,7 +103,12 @@ primary : NUMBER
         | IDENTIFIER L_PAREN arg_list_opt R_PAREN   /* NUEVA: llamada a función */
         | L_PAREN expr R_PAREN
 
-let_expr : LET IDENTIFIER EQUAL expr IN expr
+let_expr : LET let_bindings IN expr
+
+let_bindings : let_binding
+             | let_bindings COMMA let_binding
+
+let_binding : IDENTIFIER EQUAL expr
 
 if_expr : IF L_PAREN expr R_PAREN expr
         | IF L_PAREN expr R_PAREN expr ELSE expr

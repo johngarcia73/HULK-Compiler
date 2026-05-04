@@ -53,7 +53,7 @@ Token raw_token(TokenType type, const std::string& value) {
 }  // namespace
 
 void test_parser(TestRunner& r) {
-    std::cout << "[test_parser] Parseando una produccion minima de asignacion\n";
+    std::cout << "[test_parser] Parseando gramatica real para if sin else y let multiple\n";
 
     Grammar grammar;
 
@@ -161,7 +161,76 @@ void test_parser(TestRunner& r) {
                             EXPECT_TRUE(r, number_node != nullptr);
                             if (number_node) {
                                 EXPECT_EQ(r, number_node->value, std::string("3"));
-                                EXPECT_TRUE(r, number_node->kind == NumberKind::Int);
+                                EXPECT_EQ(r, number_node->kind, std::string("int"));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ParseResult multi_let_res = parse_with_project_grammar({
+        raw_token(TokenType::TOKEN_LET, "let"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_NUMBER, "6"),
+        raw_token(TokenType::TOKEN_COMMA, ","),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "b"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_STAR, "*"),
+        raw_token(TokenType::TOKEN_NUMBER, "7"),
+        raw_token(TokenType::TOKEN_IN, "in"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "b"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";")
+    });
+    EXPECT_TRUE(r, multi_let_res.is_success());
+    if (multi_let_res.is_success()) {
+        auto* program = dynamic_cast<ProgramNode*>(multi_let_res.ast.get());
+        EXPECT_TRUE(r, program != nullptr);
+        if (program) {
+            EXPECT_EQ(r, program->stmts.size(), (size_t)1);
+            if (program->stmts.size() == 1) {
+                auto* expr_stmt = dynamic_cast<ExprStmtNode*>(program->stmts[0]);
+                EXPECT_TRUE(r, expr_stmt != nullptr);
+                if (expr_stmt) {
+                    auto* outer_let = dynamic_cast<LetNode*>(expr_stmt->expr);
+                    EXPECT_TRUE(r, outer_let != nullptr);
+                    if (outer_let) {
+                        EXPECT_EQ(r, outer_let->name, std::string("a"));
+                        auto* outer_init = dynamic_cast<NumberNode*>(outer_let->init);
+                        EXPECT_TRUE(r, outer_init != nullptr);
+                        if (outer_init) {
+                            EXPECT_EQ(r, outer_init->value, std::string("6"));
+                            EXPECT_EQ(r, outer_init->kind, std::string("int"));
+                        }
+
+                        auto* inner_let = dynamic_cast<LetNode*>(outer_let->body);
+                        EXPECT_TRUE(r, inner_let != nullptr);
+                        if (inner_let) {
+                            EXPECT_EQ(r, inner_let->name, std::string("b"));
+                            auto* init_expr = dynamic_cast<BinaryOpNode*>(inner_let->init);
+                            EXPECT_TRUE(r, init_expr != nullptr);
+                            if (init_expr) {
+                                EXPECT_EQ(r, init_expr->op, std::string("*"));
+                                auto* left_var = dynamic_cast<VariableNode*>(init_expr->left);
+                                auto* right_num = dynamic_cast<NumberNode*>(init_expr->right);
+                                EXPECT_TRUE(r, left_var != nullptr);
+                                EXPECT_TRUE(r, right_num != nullptr);
+                                if (left_var) {
+                                    EXPECT_EQ(r, left_var->name, std::string("a"));
+                                }
+                                if (right_num) {
+                                    EXPECT_EQ(r, right_num->value, std::string("7"));
+                                    EXPECT_EQ(r, right_num->kind, std::string("int"));
+                                }
+                            }
+
+                            auto* result_var = dynamic_cast<VariableNode*>(inner_let->body);
+                            EXPECT_TRUE(r, result_var != nullptr);
+                            if (result_var) {
+                                EXPECT_EQ(r, result_var->name, std::string("b"));
                             }
                         }
                     }

@@ -42,3 +42,10 @@ let absVal = abs(-42) in print(absVal);
 
 print("sin(0) is: ");
 let sinVal = sin(0) in print(sinVal);
+
+
+let number = 42, text = "The meaning of life is" in print(text @ number);
+
+let number = 42 in let text = "The meaning of life is" in print(text @ number);
+
+let number = 42 in (let text = "The meaning of life is" in (print(text @ number)));

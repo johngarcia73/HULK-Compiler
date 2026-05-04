@@ -1,5 +1,6 @@
 #include "ast_node.hpp"
 #include "../../semantic/visitor.hpp"
+#include <cstdlib>
 #include <sstream>
 
 namespace {
@@ -52,6 +53,29 @@ long long NumberNode::asInt() const {
 
 double NumberNode::asDouble() const {
     try { return std::stod(value); } catch(...) { return 0.0; }
+}
+
+bool NumberNode::isWellFormed() const {
+    if (value.empty()) {
+        return false;
+    }
+
+    char* end = nullptr;
+    if (kind == "int") {
+        std::strtoll(value.c_str(), &end, 10);
+    } else if (kind == "float") {
+        std::strtof(value.c_str(), &end);
+    } else if (kind == "double") {
+        std::strtod(value.c_str(), &end);
+    } else {
+        return false;
+    }
+
+    return end != nullptr && *end == '\0';
+}
+
+std::string NumberNode::kindName() const {
+    return kind.empty() ? "int" : kind;
 }
 
 void NumberNode::print(std::ostream &o, int indent_n) const {

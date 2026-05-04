@@ -31,6 +31,36 @@ static SourceSpan merged_rhs_span(const std::vector<Value>& rhs) {
     return combined;
 }
 
+static ASTNode* build_nested_let(
+    LetBindingsNode* bindings_node,
+    ASTNode* body,
+    const SourceSpan& full_span) {
+    if (!bindings_node) {
+        return attach_span(body, full_span);
+    }
+
+    ASTNode* result = body;
+    for (auto it = bindings_node->bindings.rbegin(); it != bindings_node->bindings.rend(); ++it) {
+        auto* binding = *it;
+        if (!binding) {
+            continue;
+        }
+
+        ASTNode* init = binding->init;
+        binding->init = nullptr;
+
+        SourceSpan let_span = SourceSpan::merge(binding->span, node_span(result));
+        if (!let_span.isValid()) {
+            let_span = full_span;
+        }
+
+        result = attach_span(new LetNode(binding->name, init, result), let_span);
+    }
+
+    delete bindings_node;
+    return attach_span(result, full_span);
+}
+
 // ASTBuilder::build - production dispatcher
 // ----------------------------------------------------------------------
 ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
@@ -39,6 +69,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         case 0: { // program : top_level_items
             if (auto* block = dynamic_cast<BlockNode*>(RHS(0))) {
                 auto items = std::move(block->stmts);
+                SourceSpan items_span = block->span;
                 delete block;
                 std::vector<ASTNode*> decls;
                 std::vector<ASTNode*> stmts;
@@ -48,7 +79,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
                     else
                         stmts.push_back(item);
                 }
-                return attach_span(new ProgramNode(std::move(decls), std::move(stmts)), block->span);
+                return attach_span(new ProgramNode(std::move(decls), std::move(stmts)), items_span);
             }
             return attach_span(new ProgramNode({}, {}), merged_rhs_span(rhs));
         }
@@ -258,15 +289,44 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
             return RHS(1);
 
         // ========== Let expression ==========
-        case 52: // LET IDENTIFIER EQUAL expr IN expr
-            return attach_span(new LetNode(TOKEN(1), RHS(3), RHS(5)), merged_rhs_span(rhs));
+        case 52: { // let_expr : LET let_bindings IN expr
+            auto* bindings = dynamic_cast<LetBindingsNode*>(RHS(1));
+            return build_nested_let(bindings, RHS(3), merged_rhs_span(rhs));
+        }
+        case 53: { // let_bindings : let_binding
+            auto* binding = dynamic_cast<LetBindingNode*>(RHS(0));
+            std::vector<LetBindingNode*> bindings;
+            if (binding) {
+                bindings.push_back(binding);
+            }
+            return attach_span(new LetBindingsNode(std::move(bindings)), merged_rhs_span(rhs));
+        }
+        case 54: { // let_bindings : let_bindings COMMA let_binding
+            auto* left = dynamic_cast<LetBindingsNode*>(RHS(0));
+            auto* right = dynamic_cast<LetBindingNode*>(RHS(2));
+            std::vector<LetBindingNode*> bindings;
+            if (left) {
+                bindings = std::move(left->bindings);
+                left->bindings.clear();
+                delete left;
+            }
+            if (right) {
+                bindings.push_back(right);
+            }
+            return attach_span(new LetBindingsNode(std::move(bindings)), merged_rhs_span(rhs));
+        }
+        case 55: { // let_binding : IDENTIFIER EQUAL expr
+            return attach_span(new LetBindingNode(TOKEN(0), RHS(2)), merged_rhs_span(rhs));
+        }
 
         // ========== If expression ==========
-        case 53: // IF L_PAREN expr R_PAREN expr ELSE expr
+        case 56: // IF L_PAREN expr R_PAREN expr
+            return attach_span(new IfNode(RHS(2), RHS(4), nullptr), merged_rhs_span(rhs));
+        case 57: // IF L_PAREN expr R_PAREN expr ELSE expr
             return attach_span(new IfNode(RHS(2), RHS(4), RHS(6)), merged_rhs_span(rhs));
 
         // ========== Call expression (obsoleta, mantenida por compatibilidad) ==========
-        case 54: { // call_expr : IDENTIFIER L_PAREN arg_list_opt R_PAREN
+        case 58: { // call_expr : IDENTIFIER L_PAREN arg_list_opt R_PAREN
             std::string name = TOKEN(0);
             std::vector<ASTNode*> args;
             if (auto* argBlock = dynamic_cast<BlockNode*>(RHS(2))) {
@@ -277,13 +337,13 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         }
 
         // ========== Argument lists ==========
-        case 55: EMPTY_BLOCK();          // arg_list_opt : ε
-        case 56: PASS();                 // arg_list_opt : arg_list
-        case 57: BUILD_ARG_LIST(RHS(0)); // arg_list -> expr
-        case 58: BUILD_BLOCK(RHS(0), RHS(2)); // arg_list -> arg_list COMMA expr
+        case 59: EMPTY_BLOCK();          // arg_list_opt : ε
+        case 60: PASS();                 // arg_list_opt : arg_list
+        case 61: BUILD_ARG_LIST(RHS(0)); // arg_list -> expr
+        case 62: BUILD_BLOCK(RHS(0), RHS(2)); // arg_list -> arg_list COMMA expr
 
         // ========== Dummy production (program') ==========
-        case 59: // program' -> program
+        case 63: // program' -> program
             return RHS(0);
 
         default:
