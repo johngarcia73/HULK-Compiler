@@ -253,7 +253,9 @@ llvm::Value* LLVMIRGenerator::visitExprStmt(ExprStmtNode& node) {
 }
 
 llvm::Value* LLVMIRGenerator::visitNumber(NumberNode& node) {
-    return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), node.value);
+    long long v = 0;
+    try { v = std::stoll(node.value); } catch(...) { v = 0; }
+    return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), static_cast<int64_t>(v));
 }
 
 llvm::Value* LLVMIRGenerator::visitBool(BoolNode& node) {

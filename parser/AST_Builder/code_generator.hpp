@@ -47,7 +47,7 @@ inline void generate_ast_builder(const std::string& grammar_file,
     code << "void ExprASTBuilder::onShift(uint32_t symbol, const Token& token, ASTNode*& result) {\n";
     code << "    // Terminal 'number' with ID " << 0 << "\n";
     code << "    if (symbol == 0) {\n";
-    code << "        result = new NumberNode(token.value, classify_number_kind(token.value));\n";
+    code << "        result = new NumberNode(token.value);\n";
     code << "    } else {\n";
     code << "        result = nullptr; // other terminals does not generate nodes\n";
     code << "    }\n";
