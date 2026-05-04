@@ -549,7 +549,7 @@ void AssignmentNode::print(std::ostream& o, int indent_n) const {
 }
 
 Type* AssignmentNode::accept(Visitor& v) {
-    throw std::runtime_error("AssignmentNode::accept not implemented");
+    return v.visit(*this);
 }
 
 // ------------------------------------------------------------
@@ -619,7 +619,7 @@ void WhileNode::print(std::ostream& o, int indent_n) const {
 }
 
 Type* WhileNode::accept(Visitor& v) {
-    throw std::runtime_error("WhileNode::accept not implemented");
+    return v.visit(*this);
 }
 
 // ------------------------------------------------------------
@@ -645,7 +645,7 @@ void ForNode::print(std::ostream& o, int indent_n) const {
 }
 
 Type* ForNode::accept(Visitor& v) {
-    throw std::runtime_error("ForNode::accept not implemented");
+    return v.visit(*this);
 }
 
 // ------------------------------------------------------------

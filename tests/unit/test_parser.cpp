@@ -53,7 +53,7 @@ Token raw_token(TokenType type, const std::string& value) {
 }  // namespace
 
 void test_parser(TestRunner& r) {
-    std::cout << "[test_parser] Parseando gramatica real para if sin else y let multiple\n";
+    std::cout << "[test_parser] Parseando gramatica real para if flexibles, elif y let multiple\n";
 
     Grammar grammar;
 
@@ -235,6 +235,212 @@ void test_parser(TestRunner& r) {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    ParseResult elif_res = parse_with_project_grammar({
+        raw_token(TokenType::TOKEN_LET, "let"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_NUMBER, "42"),
+        raw_token(TokenType::TOKEN_COMMA, ","),
+        raw_token(TokenType::TOKEN_LET, "let"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "mod"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_MODULE, "%"),
+        raw_token(TokenType::TOKEN_NUMBER, "3"),
+        raw_token(TokenType::TOKEN_IN, "in"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "print"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IF, "if"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "mod"),
+        raw_token(TokenType::TOKEN_EQUALITY, "=="),
+        raw_token(TokenType::TOKEN_NUMBER, "0"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_STRING, "\"Magic\""),
+        raw_token(TokenType::TOKEN_ELIF, "elif"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "mod"),
+        raw_token(TokenType::TOKEN_MODULE, "%"),
+        raw_token(TokenType::TOKEN_NUMBER, "3"),
+        raw_token(TokenType::TOKEN_EQUALITY, "=="),
+        raw_token(TokenType::TOKEN_NUMBER, "1"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_STRING, "\"Woke\""),
+        raw_token(TokenType::TOKEN_ELSE, "else"),
+        raw_token(TokenType::TOKEN_STRING, "\"Dumb\""),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";")
+    });
+    EXPECT_TRUE(r, elif_res.is_success());
+    if (elif_res.is_success()) {
+        auto* program = dynamic_cast<ProgramNode*>(elif_res.ast.get());
+        EXPECT_TRUE(r, program != nullptr);
+        if (program && program->stmts.size() == 1) {
+            auto* expr_stmt = dynamic_cast<ExprStmtNode*>(program->stmts[0]);
+            EXPECT_TRUE(r, expr_stmt != nullptr);
+            if (expr_stmt) {
+                auto* outer_let = dynamic_cast<LetNode*>(expr_stmt->expr);
+                EXPECT_TRUE(r, outer_let != nullptr);
+                if (outer_let) {
+                    auto* inner_let = dynamic_cast<LetNode*>(outer_let->body);
+                    EXPECT_TRUE(r, inner_let != nullptr);
+                    if (inner_let) {
+                        auto* print_call = dynamic_cast<FunctionCallNode*>(inner_let->body);
+                        EXPECT_TRUE(r, print_call != nullptr);
+                        if (print_call && !print_call->args.empty()) {
+                            auto* outer_if = dynamic_cast<IfNode*>(print_call->args[0]);
+                            EXPECT_TRUE(r, outer_if != nullptr);
+                            EXPECT_TRUE(r, outer_if && outer_if->else_branch != nullptr);
+                            if (outer_if && outer_if->else_branch) {
+                                auto* nested_if = dynamic_cast<IfNode*>(outer_if->else_branch);
+                                EXPECT_TRUE(r, nested_if != nullptr);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ParseResult while_res = parse_with_project_grammar({
+        raw_token(TokenType::TOKEN_LET, "let"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_NUMBER, "10"),
+        raw_token(TokenType::TOKEN_IN, "in"),
+        raw_token(TokenType::TOKEN_WHILE, "while"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_GREATER_EQUALS, ">="),
+        raw_token(TokenType::TOKEN_NUMBER, "0"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_L_CURL_BRACK, "{"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "print"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_MINUS, "-"),
+        raw_token(TokenType::TOKEN_NUMBER, "1"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_R_CURL_BRACK, "}"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";")
+    });
+    EXPECT_TRUE(r, while_res.is_success());
+    if (while_res.is_success()) {
+        auto* program = dynamic_cast<ProgramNode*>(while_res.ast.get());
+        EXPECT_TRUE(r, program != nullptr);
+        if (program && program->stmts.size() == 1) {
+            auto* expr_stmt = dynamic_cast<ExprStmtNode*>(program->stmts[0]);
+            EXPECT_TRUE(r, expr_stmt != nullptr);
+            if (expr_stmt) {
+                auto* outer_let = dynamic_cast<LetNode*>(expr_stmt->expr);
+                EXPECT_TRUE(r, outer_let != nullptr);
+                if (outer_let) {
+                    auto* while_node = dynamic_cast<WhileNode*>(outer_let->body);
+                    EXPECT_TRUE(r, while_node != nullptr);
+                    if (while_node) {
+                        auto* block = dynamic_cast<BlockNode*>(while_node->body);
+                        EXPECT_TRUE(r, block != nullptr);
+                        if (block && block->stmts.size() == 2) {
+                            auto* assign_stmt = dynamic_cast<ExprStmtNode*>(block->stmts[1]);
+                            EXPECT_TRUE(r, assign_stmt != nullptr);
+                            if (assign_stmt) {
+                                auto* assign = dynamic_cast<AssignmentNode*>(assign_stmt->expr);
+                                EXPECT_TRUE(r, assign != nullptr);
+                                if (assign) {
+                                    EXPECT_EQ(r, assign->target, std::string("a"));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ParseResult let_block_body_res = parse_with_project_grammar({
+        raw_token(TokenType::TOKEN_LET, "let"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "m"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_MODULE, "%"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "b"),
+        raw_token(TokenType::TOKEN_IN, "in"),
+        raw_token(TokenType::TOKEN_L_CURL_BRACK, "{"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "b"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "a"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "m"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_R_CURL_BRACK, "}"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";")
+    });
+    EXPECT_TRUE(r, let_block_body_res.is_success());
+    if (let_block_body_res.is_success()) {
+        auto* program = dynamic_cast<ProgramNode*>(let_block_body_res.ast.get());
+        EXPECT_TRUE(r, program != nullptr);
+        if (program && program->stmts.size() == 1) {
+            auto* expr_stmt = dynamic_cast<ExprStmtNode*>(program->stmts[0]);
+            EXPECT_TRUE(r, expr_stmt != nullptr);
+            if (expr_stmt) {
+                auto* let_node = dynamic_cast<LetNode*>(expr_stmt->expr);
+                EXPECT_TRUE(r, let_node != nullptr);
+                if (let_node) {
+                    auto* block = dynamic_cast<BlockNode*>(let_node->body);
+                    EXPECT_TRUE(r, block != nullptr);
+                    if (block) {
+                        EXPECT_EQ(r, block->stmts.size(), (size_t)2);
+                    }
+                }
+            }
+        }
+    }
+
+    ParseResult for_res = parse_with_project_grammar({
+        raw_token(TokenType::TOKEN_FOR, "for"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_IN, "in"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "range"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_NUMBER, "0"),
+        raw_token(TokenType::TOKEN_COMMA, ","),
+        raw_token(TokenType::TOKEN_NUMBER, "10"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "print"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";")
+    });
+    EXPECT_TRUE(r, for_res.is_success());
+    if (for_res.is_success()) {
+        auto* program = dynamic_cast<ProgramNode*>(for_res.ast.get());
+        EXPECT_TRUE(r, program != nullptr);
+        if (program && program->stmts.size() == 1) {
+            auto* for_node = dynamic_cast<ForNode*>(program->stmts[0]);
+            EXPECT_TRUE(r, for_node != nullptr);
+            if (for_node) {
+                EXPECT_EQ(r, for_node->iterator, std::string("x"));
+                auto* iterable = dynamic_cast<FunctionCallNode*>(for_node->iterable);
+                EXPECT_TRUE(r, iterable != nullptr);
+                auto* body_stmt = dynamic_cast<ExprStmtNode*>(for_node->body);
+                EXPECT_TRUE(r, body_stmt != nullptr);
             }
         }
     }

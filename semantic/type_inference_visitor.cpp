@@ -412,7 +412,7 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
         return node.type;
     }
 
-    if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/") {
+    if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/" || node.op == "%") {
         if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
             error(
                 SemanticPhase::Inference,
@@ -442,6 +442,30 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
                 SemanticPhase::Inference,
                 node,
                 "Operator '==' requires operands of the same type.",
+                {"Left operand: " + left->toString(), "Right operand: " + right->toString()});
+        }
+        node.type = BoolType::instance();
+        return node.type;
+    }
+
+    if (node.op == "!=") {
+        if (!left->equals(right)) {
+            error(
+                SemanticPhase::Inference,
+                node,
+                "Operator '!=' requires operands of the same type.",
+                {"Left operand: " + left->toString(), "Right operand: " + right->toString()});
+        }
+        node.type = BoolType::instance();
+        return node.type;
+    }
+
+    if (node.op == "&" || node.op == "|") {
+        if (!left->equals(BoolType::instance()) || !right->equals(BoolType::instance())) {
+            error(
+                SemanticPhase::Inference,
+                node,
+                "Boolean operator '" + node.op + "' requires Bool operands.",
                 {"Left operand: " + left->toString(), "Right operand: " + right->toString()});
         }
         node.type = BoolType::instance();
@@ -528,6 +552,144 @@ Type* TypeInferenceVisitor::visit(ExprStmtNode& node) {
     }
 
     node.type = node.expr ? coerceUnknown(node.expr->accept(*this)) : VoidType::instance();
+    return node.type;
+}
+
+Type* TypeInferenceVisitor::visit(AssignmentNode& node) {
+    if (collecting) {
+        if (collectingDependencies && node.value) {
+            node.value->accept(*this);
+        }
+        return nullptr;
+    }
+
+    Type* valueType = node.value ? coerceUnknown(node.value->accept(*this)) : UnknownType::instance();
+    SymbolInfo* symbol = symTable.lookup(node.target);
+    if (!symbol) {
+        error(
+            SemanticPhase::Inference,
+            node,
+            "Cannot assign to undeclared symbol '" + node.target + "'.");
+        node.type = valueType;
+        return node.type;
+    }
+
+    if (symbol->kind == SemanticSymbolKind::Function) {
+        error(
+            SemanticPhase::Inference,
+            node,
+            "Cannot assign to function '" + node.target + "'.");
+        node.type = valueType;
+        return node.type;
+    }
+
+    Type* targetType = coerceUnknown(symbol->type);
+    if (targetType->equals(UnknownType::instance()) &&
+        !valueType->equals(UnknownType::instance())) {
+        symbol->type = valueType;
+        targetType = valueType;
+        traceInference(
+            "Assignment refined '" + node.target + "' to " + valueType->toString() +
+            " at " + safeSpanName(node.span));
+    } else if (!targetType->equals(UnknownType::instance()) &&
+               !valueType->equals(UnknownType::instance()) &&
+               !targetType->equals(valueType)) {
+        error(
+            SemanticPhase::Inference,
+            node,
+            "Assignment type mismatch for '" + node.target + "'.",
+            {
+                "Target type: " + targetType->toString(),
+                "Assigned value type: " + valueType->toString()
+            });
+    }
+
+    node.type = valueType;
+    return node.type;
+}
+
+Type* TypeInferenceVisitor::visit(WhileNode& node) {
+    if (collecting) {
+        if (collectingDependencies) {
+            if (node.condition) {
+                node.condition->accept(*this);
+            }
+            if (node.body) {
+                node.body->accept(*this);
+            }
+        }
+        return nullptr;
+    }
+
+    Type* conditionType = node.condition
+        ? coerceUnknown(node.condition->accept(*this))
+        : UnknownType::instance();
+    if (!conditionType->equals(BoolType::instance()) &&
+        !conditionType->equals(UnknownType::instance())) {
+        error(
+            SemanticPhase::Inference,
+            node.condition ? node.condition->span : node.span,
+            "While condition must be boolean.",
+            {"Condition type: " + conditionType->toString()});
+    }
+
+    Type* bodyType = node.body ? coerceUnknown(node.body->accept(*this)) : VoidType::instance();
+    node.type = bodyType;
+    return node.type;
+}
+
+Type* TypeInferenceVisitor::visit(ForNode& node) {
+    if (collecting) {
+        if (collectingDependencies) {
+            if (node.iterable) {
+                node.iterable->accept(*this);
+            }
+            if (node.body) {
+                node.body->accept(*this);
+            }
+        }
+        return nullptr;
+    }
+
+    Type* iterableType = node.iterable
+        ? coerceUnknown(node.iterable->accept(*this))
+        : UnknownType::instance();
+    if (iterableType->equals(VoidType::instance())) {
+        error(
+            SemanticPhase::Inference,
+            node.iterable ? node.iterable->span : node.span,
+            "For loop iterable cannot be Void.");
+    }
+
+    Type* iteratorType = UnknownType::instance();
+    if (auto* call = dynamic_cast<FunctionCallNode*>(node.iterable)) {
+        if (call->name == "range") {
+            iteratorType = NumberType::instance();
+        }
+    }
+
+    symTable.enterScope();
+    if (!symTable.insert(
+            node.iterator,
+            SymbolInfo(
+                node.iterator,
+                iteratorType,
+                SemanticSymbolKind::Variable,
+                symTable.getCurrentLevel()))) {
+        error(
+            SemanticPhase::Inference,
+            node,
+            "Loop variable '" + node.iterator + "' is already declared in this scope.");
+    }
+
+    traceInference(
+        "For iterator '" + node.iterator + "' inferred as " + safeTypeName(iteratorType) +
+        " at " + safeSpanName(node.span));
+
+    Type* bodyType = node.body ? coerceUnknown(node.body->accept(*this)) : VoidType::instance();
+    symTable.exitScope();
+
+    node.type = bodyType;
     return node.type;
 }
 

@@ -49,3 +49,42 @@ let number = 42, text = "The meaning of life is" in print(text @ number);
 let number = 42 in let text = "The meaning of life is" in print(text @ number);
 
 let number = 42 in (let text = "The meaning of life is" in (print(text @ number)));
+
+let a = 42 in if (a % 2 == 0) print("Even") else print("odd");
+
+let a = 42 in print(if (a % 2 == 0) "even" else "odd");
+
+let a = 42 in
+    if (a % 2 == 0) {
+        print(a);
+        print("Even");
+    }
+    else print("Odd");
+
+let a = 42, let mod = a % 3 in
+    print(
+        if (mod == 0) "Magic"
+        elif (mod % 3 == 1) "Woke"
+        else "Dumb"
+    );
+
+let countdown = 5 in while (countdown >= 0) {
+    print(countdown);
+    countdown := countdown - 1;
+};
+
+function gcd(a: Number, b: Number) => while (a > 0)
+    let m = a % b in {
+        b := a;
+        a := m;
+    };
+
+print("gcd(48, 18) is: ");
+print(gcd(48, 18));
+
+for (x in range(0, 5)) print(x);
+
+let a = 10 in while (a >= 0) {
+    print(a);
+    a := a - 1;
+};
