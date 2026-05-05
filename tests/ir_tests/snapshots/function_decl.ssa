@@ -1,0 +1,18 @@
+data $msg = align 8 { b "Result is %d \n ", b 0}
+
+
+export function l $_add( l %_a1, l %_b1){
+@start
+    %addition1 = l add %_a1, %_b1
+    ret %addition1
+}
+
+export function w $main() {
+@start
+    %num_literal1 =l copy 5
+    %num_literal2 =l copy 10
+    %call_result1 = l call $_add( l %num_literal1, l %num_literal2)
+    call $printf(l $msg,...,l %call_result1)
+    call $_hulk_cleanup()
+    ret 0
+}

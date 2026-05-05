@@ -1,0 +1,21 @@
+data $msg = align 8 { b "Result is %d \n ", b 0}
+data $string_literal_pointer0 = align 16 { w 20, b "Outer scope variable", b 0}
+data $string_literal_pointer1 = align 16 { w 20, b "Inner scope variable", b 0}
+
+
+export function w $main() {
+@start
+    %string_literal_pointer0 = l copy $string_literal_pointer0
+    %_x1 = l copy %string_literal_pointer0 
+    %call_result1 = l call $_print( l %_x1)
+    %string_literal_pointer1 = l copy $string_literal_pointer1
+    %_x2 = l copy %string_literal_pointer1 
+    %call_result2 = l call $_print( l %_x2)
+    %let_in_result1 = l copy %call_result2
+    %call_result3 = l call $_print( l %_x1)
+    %block_result1 = l copy %call_result3
+    %let_in_result2 = l copy %block_result1
+    call $printf(l $msg,...,l %let_in_result2)
+    call $_hulk_cleanup()
+    ret 0
+}

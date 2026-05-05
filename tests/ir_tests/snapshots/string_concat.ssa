@@ -1,0 +1,18 @@
+data $msg = align 8 { b "Result is %d \n ", b 0}
+data $string_literal_pointer0 = align 16 { w 7, b "Hello, ", b 0}
+data $string_literal_pointer1 = align 16 { w 5, b "World", b 0}
+data $string_literal_pointer2 = align 16 { w 1, b "!", b 0}
+
+
+export function w $main() {
+@start
+    %string_literal_pointer0 = l copy $string_literal_pointer0
+    %string_literal_pointer1 = l copy $string_literal_pointer1
+    %concat1 = l call $_string_concat(l %string_literal_pointer0, l %string_literal_pointer1)
+    %string_literal_pointer2 = l copy $string_literal_pointer2
+    %concat2 = l call $_string_concat(l %concat1, l %string_literal_pointer2)
+    %call_result1 = l call $_print( l %concat2)
+    call $printf(l $msg,...,l %call_result1)
+    call $_hulk_cleanup()
+    ret 0
+}

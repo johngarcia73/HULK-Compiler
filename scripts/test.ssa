@@ -1,0 +1,19 @@
+# Define the string in the data section
+data $msg = align 8{ b "Result is %d \n", b 0}
+data $hello = align 8{ b "Hello, World!\n", b 0}
+function l $add(l %a, l %b) {
+@start
+    %result = l add %a, %b
+    ret %result
+}
+
+export function w $main() {
+@start
+        %n1 = l copy 10
+        %n2 = l copy 20 
+        %a = l call $add(l %n1, l %n2)
+        call $_print(l $hello)
+        call $printf(l $msg,..., l %a)
+        ret 0
+    
+}

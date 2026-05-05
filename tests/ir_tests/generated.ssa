@@ -1,0 +1,23 @@
+data $msg = align 8 { b "Result is %d \n ", b 0}
+data $string_literal_ptr1 = align 8 { b "Outer scope variable", b 0}
+data $string_literal_ptr2 = align 8 { b "Inner scope variable", b 0}
+
+
+export function w $main() {
+@start
+    %string_literal_ptr1 = l copy $string_literal_ptr1
+    %_x1 = l copy %string_literal_ptr1 
+    call $printf(l %_x1)
+    %print_result1 = l copy %_x1
+    %string_literal_ptr2 = l copy $string_literal_ptr2
+    %_x2 = l copy %string_literal_ptr2 
+    call $printf(l %_x2)
+    %print_result2 = l copy %_x2
+    %let_in_result1 = l copy %print_result2
+    call $printf(l %_x1)
+    %print_result3 = l copy %_x1
+    %block_result1 = l copy %print_result3
+    %let_in_result2 = l copy %block_result1
+    call $printf(l $msg,...,l %let_in_result2)
+    ret 0
+}

@@ -1,0 +1,26 @@
+data $msg = align 8 { b "Result is %d \n ", b 0}
+data $string_literal_pointer0 = align 16 { w 16, b "Five is greather", b 0}
+data $string_literal_pointer1 = align 16 { w 15, b "Ten is greather", b 0}
+
+
+export function w $main() {
+@start
+    %num_literal1 =l copy 5
+    %num_literal2 =l copy 10
+    %greater_than1 = l csgtl %num_literal1, %num_literal2
+    jnz %greater_than1,@then1,@else1
+    
+    @then1
+        %string_literal_pointer0 = l copy $string_literal_pointer0
+        %call_result1 = l call $_print( l %string_literal_pointer0)
+        %if_result1 = l copy %call_result1
+        jmp @merge1
+    @else1
+        %string_literal_pointer1 = l copy $string_literal_pointer1
+        %call_result2 = l call $_print( l %string_literal_pointer1)
+        %if_result1= l copy %call_result2
+    @merge1
+    call $printf(l $msg,...,l %if_result1)
+    call $_hulk_cleanup()
+    ret 0
+}
