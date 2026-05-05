@@ -6,7 +6,6 @@
 // Helper macros for safe access to the RHS vector
 #define RHS(i) (rhs[i].node)
 #define TOKEN(i) (rhs[i].token_text.value_or(""))
-#define INT_VAL(i) (rhs[i].int_value.value_or(0))
 
 inline SourceSpan node_span(ASTNode* node) {
     return node ? node->span : SourceSpan{};

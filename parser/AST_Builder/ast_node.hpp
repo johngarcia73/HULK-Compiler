@@ -26,8 +26,13 @@ inline void indent(std::ostream &o, int n) {
 // ============================================================================
 
 struct NumberNode : ASTNode {
-    long long value;
-    NumberNode(long long v);
+    std::string value;    // lexical representation of the number
+    std::string kind;     // numeric kind: "int", "float", "double", etc.
+    NumberNode(const std::string& v, const std::string& kind = "int");
+    long long asInt() const;
+    double asDouble() const;
+    bool isWellFormed() const;
+    std::string kindName() const;
     void print(std::ostream &o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
 };

@@ -57,6 +57,9 @@ public:
     Type* visit(BinaryOpNode& node) override;
     Type* visit(UnaryOpNode& node) override;
     Type* visit(ExprStmtNode& node) override;
+    Type* visit(AssignmentNode& node) override;
+    Type* visit(WhileNode& node) override;
+    Type* visit(ForNode& node) override;
     Type* visit(ParamListNode& node) override;
     Type* visit(LetBindingNode& node) override;
     Type* visit(LetBindingsNode& node) override;

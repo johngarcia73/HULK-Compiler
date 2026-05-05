@@ -10,15 +10,24 @@ enum class TokenType : int {
     TOKEN_NUMBER_TYPE, 
     TOKEN_BOOL_TYPE,  
     TOKEN_STRING_TYPE,
+    TOKEN_WHILE,
+    TOKEN_FOR,
     TOKEN_LET,
     TOKEN_IN,
     TOKEN_IF,
+    TOKEN_ELIF,
     TOKEN_ELSE,
     TOKEN_RETURN,
+    TOKEN_TRUE,
+    TOKEN_FALSE,
     
     TOKEN_NUMBER,
     TOKEN_STRING,
     TOKEN_ARROW,
+    TOKEN_MODULE,
+    TOKEN_NOT,
+    TOKEN_AND,
+    TOKEN_OR,
     TOKEN_PLUS,
     TOKEN_MINUS,
     TOKEN_STAR,
@@ -69,6 +78,7 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_STRING_TYPE:  return "STRING_TYPE";
         case TokenType::TOKEN_NUMBER:       return "NUMBER";
         case TokenType::TOKEN_STRING:       return "STRING";
+        case TokenType::TOKEN_MODULE:       return "MODULE";
         case TokenType::TOKEN_PLUS:         return "PLUS";
         case TokenType::TOKEN_MINUS:        return "MINUS";
         case TokenType::TOKEN_STAR:         return "STAR";
@@ -84,15 +94,23 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_R_CURL_BRACK: return "R_CURL_BRACK";
         case TokenType::TOKEN_SEMICOLON:    return "SEMICOLON";
         case TokenType::TOKEN_COMMA:        return "COMMA";
+        case TokenType::TOKEN_WHILE:        return "WHILE";
+        case TokenType::TOKEN_FOR:          return "FOR";
         case TokenType::TOKEN_LET:          return "LET";
         case TokenType::TOKEN_IN:           return "IN";
         case TokenType::TOKEN_IF:           return "IF";
+        case TokenType::TOKEN_ELIF:         return "ELIF";
         case TokenType::TOKEN_ELSE:         return "ELSE";
         case TokenType::TOKEN_RETURN:       return "RETURN";
+        case TokenType::TOKEN_TRUE:         return "TRUE";
+        case TokenType::TOKEN_FALSE:        return "FALSE";
         case TokenType::TOKEN_EQUALITY:     return "EQUALITY";
         case TokenType::TOKEN_NOT_EQUAL:    return "NOT_EQUAL";
         case TokenType::TOKEN_EQUAL:        return "EQUAL";
         case TokenType::TOKEN_ARROW:        return "ARROW";
+        case TokenType::TOKEN_NOT:          return "NOT";
+        case TokenType::TOKEN_AND:          return "AND";
+        case TokenType::TOKEN_OR:           return "OR";
         case TokenType::TOKEN_LESS_THAN:    return "LESS_THAN";
         case TokenType::TOKEN_GREATER_THAN: return "GREATER_THAN";
         case TokenType::TOKEN_LESS_EQUALS: return "LESS_EQUALS";
@@ -118,17 +136,30 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_NUMBER_TYPE, "Number", false },
         { TokenType::TOKEN_BOOL_TYPE,   "Bool",   false },
         { TokenType::TOKEN_STRING_TYPE, "String", false },
+        { TokenType::TOKEN_WHILE,      "while", false },
+        { TokenType::TOKEN_FOR,      "for", false },
         { TokenType::TOKEN_LET,      "let",      false },
         { TokenType::TOKEN_IN,       "in",       false },
         { TokenType::TOKEN_IF,       "if",       false },
+        { TokenType::TOKEN_ELIF,     "elif",     false },
         { TokenType::TOKEN_ELSE,     "else",     false },
         { TokenType::TOKEN_RETURN,   "return",   false },
+        { TokenType::TOKEN_TRUE,     "true",     false },
+        { TokenType::TOKEN_FALSE,    "false",    false },
 
         { TokenType::TOKEN_STRING,   R"("([^"\\]|\\.)*")", false },
 
-        { TokenType::TOKEN_NUMBER,   "[0-9]+", false },
+        { TokenType::TOKEN_NUMBER,   "[0-9]+|[0-9]+\\.[0-9]+", false },
 
         // Operators and symbols
+        { TokenType::TOKEN_NOT_EQUAL, "!=", false },
+        { TokenType::TOKEN_LESS_EQUALS, "<=", false },
+        { TokenType::TOKEN_GREATER_EQUALS, ">=", false },
+        { TokenType::TOKEN_EQUALITY, "==", false },
+        { TokenType::TOKEN_MODULE,     "%", false },
+        { TokenType::TOKEN_NOT,      "!", false },
+        { TokenType::TOKEN_AND,      "&", false },
+        { TokenType::TOKEN_OR,       "\\|", false },
         { TokenType::TOKEN_PLUS,     "\\+", false },
         { TokenType::TOKEN_MINUS,    "-",   false },
         { TokenType::TOKEN_STAR,     "\\*", false },
@@ -136,10 +167,6 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_CONCAT,   "@",   false },
         { TokenType::TOKEN_LESS_THAN,    "<",   false },
         { TokenType::TOKEN_GREATER_THAN, ">",   false },
-        { TokenType::TOKEN_LESS_EQUALS,    "<=",   false },   // corregido
-        { TokenType::TOKEN_GREATER_EQUALS, ">=",   false },
-        { TokenType::TOKEN_EQUALITY, "==", false },
-        { TokenType::TOKEN_NOT_EQUAL, "!=", false },
         { TokenType::TOKEN_EQUAL,    "=",  false },
         { TokenType::TOKEN_ARROW,    "=>", false },
         { TokenType::TOKEN_LPAREN,   "\\(", false },
