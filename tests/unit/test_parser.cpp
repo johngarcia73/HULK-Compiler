@@ -161,7 +161,7 @@ void test_parser(TestRunner& r) {
                             EXPECT_TRUE(r, number_node != nullptr);
                             if (number_node) {
                                 EXPECT_EQ(r, number_node->value, std::string("3"));
-                                EXPECT_EQ(r, number_node->kind, std::string("int"));
+                                EXPECT_EQ(r, number_node->kindName(), std::string("int"));
                             }
                         }
                     }
@@ -203,7 +203,7 @@ void test_parser(TestRunner& r) {
                         EXPECT_TRUE(r, outer_init != nullptr);
                         if (outer_init) {
                             EXPECT_EQ(r, outer_init->value, std::string("6"));
-                            EXPECT_EQ(r, outer_init->kind, std::string("int"));
+                            EXPECT_EQ(r, outer_init->kindName(), std::string("int"));
                         }
 
                         auto* inner_let = dynamic_cast<LetNode*>(outer_let->body);
@@ -223,7 +223,7 @@ void test_parser(TestRunner& r) {
                                 }
                                 if (right_num) {
                                     EXPECT_EQ(r, right_num->value, std::string("7"));
-                                    EXPECT_EQ(r, right_num->kind, std::string("int"));
+                                    EXPECT_EQ(r, right_num->kindName(), std::string("int"));
                                 }
                             }
 
@@ -234,6 +234,38 @@ void test_parser(TestRunner& r) {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    ParseResult number_kinds_res = parse_with_project_grammar({
+        raw_token(TokenType::TOKEN_NUMBER, "2147483648"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_NUMBER, "123.4"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";")
+    });
+    EXPECT_TRUE(r, number_kinds_res.is_success());
+    if (number_kinds_res.is_success()) {
+        auto* program = dynamic_cast<ProgramNode*>(number_kinds_res.ast.get());
+        EXPECT_TRUE(r, program != nullptr);
+        if (program && program->stmts.size() == 2) {
+            auto* first_stmt = dynamic_cast<ExprStmtNode*>(program->stmts[0]);
+            auto* second_stmt = dynamic_cast<ExprStmtNode*>(program->stmts[1]);
+            EXPECT_TRUE(r, first_stmt != nullptr);
+            EXPECT_TRUE(r, second_stmt != nullptr);
+            if (first_stmt) {
+                auto* long_number = dynamic_cast<NumberNode*>(first_stmt->expr);
+                EXPECT_TRUE(r, long_number != nullptr);
+                if (long_number) {
+                    EXPECT_EQ(r, long_number->kindName(), std::string("long"));
+                }
+            }
+            if (second_stmt) {
+                auto* double_number = dynamic_cast<NumberNode*>(second_stmt->expr);
+                EXPECT_TRUE(r, double_number != nullptr);
+                if (double_number) {
+                    EXPECT_EQ(r, double_number->kindName(), std::string("double"));
                 }
             }
         }

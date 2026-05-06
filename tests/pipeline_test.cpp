@@ -7,8 +7,6 @@
 #include "../parser/Parser_Generator/genparser.hpp"
 #include "../lexer/lexer.hpp"
 #include "../semantic/analyzer.hpp"
-#include "../ir_generator/llvm_ir_generator.hpp"
-#include "../ir_generator/llvm_ir_executor.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <fstream>

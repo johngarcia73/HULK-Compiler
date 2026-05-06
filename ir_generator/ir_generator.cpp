@@ -1,14 +1,12 @@
 #include "ir_generator.hpp"
 #include "../parser/AST_Builder/ast_node.hpp"
 static std::string hulkTypeToQbeType(Type* type) {
-    std::string typeStr="l";
-    if(type){
-       typeStr =type->toString();
-    }
-     
-    if (typeStr == "bool") {
+    if (type && type->equals(BoolType::instance())) {
         return "b";
-    } 
+    }
+    if (isNumberType(type)) {
+        return "l";
+    }
     return "l";
 }
 

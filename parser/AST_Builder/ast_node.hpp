@@ -27,8 +27,9 @@ inline void indent(std::ostream &o, int n) {
 
 struct NumberNode : ASTNode {
     std::string value;    // lexical representation of the number
-    std::string kind;     // numeric kind: "int", "float", "double", etc.
-    NumberNode(const std::string& v, const std::string& kind = "int");
+    NumberKind numberKind;
+    NumberNode(const std::string& v, NumberKind kind = NumberKind::Int);
+    NumberNode(long long v, NumberKind kind = NumberKind::Int);
     long long asInt() const;
     double asDouble() const;
     bool isWellFormed() const;

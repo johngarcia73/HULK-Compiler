@@ -88,3 +88,5 @@ let a = 10 in while (a >= 0) {
     print(a);
     a := a - 1;
 };
+
+123+12.8;

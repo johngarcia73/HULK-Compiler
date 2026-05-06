@@ -12,6 +12,22 @@ std::string safeSpanName(const SourceSpan& span) {
     return span.isValid() ? span.toString() : std::string("<unknown>");
 }
 
+bool areTypesCompatibleForAssignment(Type* expected, Type* actual) {
+    if (!expected || !actual) {
+        return false;
+    }
+    if (expected->equals(UnknownType::instance()) || actual->equals(UnknownType::instance())) {
+        return true;
+    }
+    if (expected->equals(AnyType::instance()) || actual->equals(AnyType::instance())) {
+        return true;
+    }
+    if (isNumberType(expected) && isNumberType(actual)) {
+        return areNumberTypesCompatible(expected, actual);
+    }
+    return expected->equals(actual);
+}
+
 }  // namespace
 
 void TypeInferenceVisitor::error(
@@ -193,7 +209,7 @@ Type* TypeInferenceVisitor::visit(FunctionDeclNode& node) {
         traceInference(
             "Refined function '" + node.name + "' to return " + actualReturnType->toString());
     } else if (!actualReturnType->equals(UnknownType::instance()) &&
-               !expectedReturnType->equals(actualReturnType)) {
+               !areTypesCompatibleForAssignment(expectedReturnType, actualReturnType)) {
         error(
             SemanticPhase::Inference,
             node,
@@ -273,6 +289,10 @@ Type* TypeInferenceVisitor::visit(IfNode& node) {
     }
 
     Type* elseType = coerceUnknown(node.else_branch->accept(*this));
+    if (isNumberType(thenType) && isNumberType(elseType)) {
+        node.type = commonNumberType(thenType, elseType);
+        return node.type ? node.type : NumberType::instance();
+    }
     if (!thenType->equals(UnknownType::instance()) &&
         !elseType->equals(UnknownType::instance()) &&
         !thenType->equals(elseType)) {
@@ -373,7 +393,7 @@ Type* TypeInferenceVisitor::visit(NumberNode& node) {
                 "Malformed numeric literal '" + node.value + "'.",
                 {"Number kind: " + node.kindName()});
         }
-        node.type = NumberType::instance();
+        node.type = NumberType::instance(node.numberKind);
         return node.type;
     }
     return nullptr;
@@ -413,19 +433,21 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
     }
 
     if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/" || node.op == "%") {
-        if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
+        if (!isNumberType(left) || !isNumberType(right)) {
             error(
                 SemanticPhase::Inference,
                 node,
                 "Arithmetic operator '" + node.op + "' requires Number operands.",
                 {"Left operand: " + left->toString(), "Right operand: " + right->toString()});
+            node.type = NumberType::instance();
+            return node.type;
         }
-        node.type = NumberType::instance();
+        node.type = commonNumberType(left, right);
         return node.type;
     }
 
     if (node.op == "<" || node.op == ">" || node.op == "<=" || node.op == ">=") {
-        if (!left->equals(NumberType::instance()) || !right->equals(NumberType::instance())) {
+        if (!isNumberType(left) || !isNumberType(right)) {
             error(
                 SemanticPhase::Inference,
                 node,
@@ -437,7 +459,7 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
     }
 
     if (node.op == "==") {
-        if (!left->equals(right)) {
+        if (!(isNumberType(left) && isNumberType(right)) && !left->equals(right)) {
             error(
                 SemanticPhase::Inference,
                 node,
@@ -449,7 +471,7 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
     }
 
     if (node.op == "!=") {
-        if (!left->equals(right)) {
+        if (!(isNumberType(left) && isNumberType(right)) && !left->equals(right)) {
             error(
                 SemanticPhase::Inference,
                 node,
@@ -474,8 +496,7 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
 
     if (node.op == "@") {
         auto is_concat_operand = [](Type* type) {
-            return type->equals(StringType::instance()) ||
-                   type->equals(NumberType::instance());
+            return type->equals(StringType::instance()) || isNumberType(type);
         };
 
         if (!is_concat_operand(left) || !is_concat_operand(right)) {
@@ -512,14 +533,16 @@ Type* TypeInferenceVisitor::visit(UnaryOpNode& node) {
     }
 
     if (node.op == "-" || node.op == "+") {
-        if (!operandType->equals(NumberType::instance())) {
+        if (!isNumberType(operandType)) {
             error(
                 SemanticPhase::Inference,
                 node,
                 "Unary operator '" + node.op + "' requires a Number operand.",
                 {"Operand type: " + operandType->toString()});
+            node.type = NumberType::instance();
+            return node.type;
         }
-        node.type = NumberType::instance();
+        node.type = operandType;
         return node.type;
     }
 
@@ -593,7 +616,7 @@ Type* TypeInferenceVisitor::visit(AssignmentNode& node) {
             " at " + safeSpanName(node.span));
     } else if (!targetType->equals(UnknownType::instance()) &&
                !valueType->equals(UnknownType::instance()) &&
-               !targetType->equals(valueType)) {
+               !areTypesCompatibleForAssignment(targetType, valueType)) {
         error(
             SemanticPhase::Inference,
             node,
@@ -741,7 +764,7 @@ Type* TypeInferenceVisitor::visit(ReturnNode& node) {
     Type* expected = coerceUnknown(returnTypeStack.back());
     if (!expected->equals(UnknownType::instance()) &&
         !expressionType->equals(UnknownType::instance()) &&
-        !expected->equals(expressionType)) {
+        !areTypesCompatibleForAssignment(expected, expressionType)) {
         error(
             SemanticPhase::Inference,
             node,

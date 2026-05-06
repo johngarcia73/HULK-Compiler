@@ -42,3 +42,4 @@ out/
 *.sln
 *.swp
 .DS_Store
+.codex

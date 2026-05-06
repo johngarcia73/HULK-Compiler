@@ -3,6 +3,41 @@
 #include <vector>
 #include <memory>
 
+enum class NumberKind {
+    Int,
+    Long,
+    Float,
+    Double
+};
+
+inline std::string numberKindToString(NumberKind kind) {
+    switch (kind) {
+        case NumberKind::Int:
+            return "int";
+        case NumberKind::Long:
+            return "long";
+        case NumberKind::Float:
+            return "float";
+        case NumberKind::Double:
+            return "double";
+    }
+    return "int";
+}
+
+inline int numberKindRank(NumberKind kind) {
+    switch (kind) {
+        case NumberKind::Int:
+            return 0;
+        case NumberKind::Long:
+            return 1;
+        case NumberKind::Float:
+            return 2;
+        case NumberKind::Double:
+            return 3;
+    }
+    return 0;
+}
+
 class Type {
 public:
     virtual ~Type() = default;
@@ -11,18 +46,103 @@ public:
 };
 
 class NumberType : public Type {
+    bool generic_;
+    NumberKind kind_;
+
+    NumberType(bool isGeneric, NumberKind kind)
+        : generic_(isGeneric), kind_(kind) {}
 public:
     static NumberType* instance() {
-        static NumberType inst;
+        static NumberType inst(true, NumberKind::Int);
         return &inst;
     }
-    std::string toString() const override { return "Number"; }
-    bool equals(const Type* other) const override {
-        return dynamic_cast<const NumberType*>(other) != nullptr;
+
+    static NumberType* instance(NumberKind kind) {
+        static NumberType intInst(false, NumberKind::Int);
+        static NumberType longInst(false, NumberKind::Long);
+        static NumberType floatInst(false, NumberKind::Float);
+        static NumberType doubleInst(false, NumberKind::Double);
+
+        switch (kind) {
+            case NumberKind::Int:
+                return &intInst;
+            case NumberKind::Long:
+                return &longInst;
+            case NumberKind::Float:
+                return &floatInst;
+            case NumberKind::Double:
+                return &doubleInst;
+        }
+        return &intInst;
     }
-private:
-    NumberType() = default;
+
+    std::string toString() const override {
+        if (generic_) {
+            return "Number";
+        }
+        return "Number<" + numberKindToString(kind_) + ">";
+    }
+
+    bool equals(const Type* other) const override {
+        auto* otherNumber = dynamic_cast<const NumberType*>(other);
+        if (!otherNumber) {
+            return false;
+        }
+        if (generic_ != otherNumber->generic_) {
+            return false;
+        }
+        return generic_ || kind_ == otherNumber->kind_;
+    }
+
+    bool isGeneric() const { return generic_; }
+    NumberKind kind() const { return kind_; }
+    bool isIntegral() const {
+        return !generic_ && (kind_ == NumberKind::Int || kind_ == NumberKind::Long);
+    }
 };
+
+inline const NumberType* asNumberType(const Type* type) {
+    return dynamic_cast<const NumberType*>(type);
+}
+
+inline NumberType* asNumberType(Type* type) {
+    return dynamic_cast<NumberType*>(type);
+}
+
+inline bool isNumberType(const Type* type) {
+    return asNumberType(type) != nullptr;
+}
+
+inline Type* commonNumberType(Type* left, Type* right) {
+    auto* leftNumber = asNumberType(left);
+    auto* rightNumber = asNumberType(right);
+    if (!leftNumber || !rightNumber) {
+        return nullptr;
+    }
+    if (leftNumber->isGeneric() || rightNumber->isGeneric()) {
+        return NumberType::instance();
+    }
+
+    NumberKind promotedKind = numberKindRank(leftNumber->kind()) >= numberKindRank(rightNumber->kind())
+        ? leftNumber->kind()
+        : rightNumber->kind();
+    return NumberType::instance(promotedKind);
+}
+
+inline bool areNumberTypesCompatible(const Type* expected, const Type* actual) {
+    auto* expectedNumber = asNumberType(expected);
+    auto* actualNumber = asNumberType(actual);
+    if (!expectedNumber || !actualNumber) {
+        return false;
+    }
+    if (expectedNumber->isGeneric()) {
+        return true;
+    }
+    if (actualNumber->isGeneric()) {
+        return false;
+    }
+    return expectedNumber->kind() == actualNumber->kind();
+}
 
 class BoolType : public Type {
 public:

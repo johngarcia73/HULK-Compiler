@@ -44,8 +44,11 @@ std::string function_signature(
 // ------------------------------------------------------------
 // NumberNode
 // ------------------------------------------------------------
-NumberNode::NumberNode(const std::string& v, const std::string& kind_)
-    : value(v), kind(kind_) {}
+NumberNode::NumberNode(const std::string& v, NumberKind kind_)
+    : value(v), numberKind(kind_) {}
+
+NumberNode::NumberNode(long long v, NumberKind kind_)
+    : value(std::to_string(v)), numberKind(kind_) {}
 
 long long NumberNode::asInt() const {
     try { return std::stoll(value); } catch(...) { return 0; }
@@ -61,27 +64,30 @@ bool NumberNode::isWellFormed() const {
     }
 
     char* end = nullptr;
-    if (kind == "int") {
-        std::strtoll(value.c_str(), &end, 10);
-    } else if (kind == "float") {
-        std::strtof(value.c_str(), &end);
-    } else if (kind == "double") {
-        std::strtod(value.c_str(), &end);
-    } else {
-        return false;
+    switch (numberKind) {
+        case NumberKind::Int:
+        case NumberKind::Long:
+            std::strtoll(value.c_str(), &end, 10);
+            break;
+        case NumberKind::Float:
+            std::strtof(value.c_str(), &end);
+            break;
+        case NumberKind::Double:
+            std::strtod(value.c_str(), &end);
+            break;
     }
 
     return end != nullptr && *end == '\0';
 }
 
 std::string NumberNode::kindName() const {
-    return kind.empty() ? "int" : kind;
+    return numberKindToString(numberKind);
 }
 
 void NumberNode::print(std::ostream &o, int indent_n) const {
     indent(o, indent_n);
     o << "Number(" << value;
-    if (!kind.empty()) o << " : " << kind;
+    o << " : " << kindName();
     o << ")";
     print_metadata(o, *this);
     o << "\n";

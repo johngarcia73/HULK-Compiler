@@ -34,6 +34,10 @@ void test_semantic(TestRunner& r) {
         new StringNode("The meaning of life is "),
         new NumberNode("42"));
     auto* modulo_expr = new BinaryOpNode("%", new NumberNode("5"), new NumberNode("2"));
+    auto* promoted_sum = new BinaryOpNode(
+        "+",
+        new NumberNode("1", NumberKind::Int),
+        new NumberNode("2.5", NumberKind::Double));
     auto* bool_condition = new BinaryOpNode(
         "&",
         new BoolNode(true),
@@ -46,6 +50,7 @@ void test_semantic(TestRunner& r) {
             new StringNode("bool-ok"),
             new StringNode("fallback")));
     auto* concat_stmt = new ExprStmtNode(concat_expr);
+    auto* promoted_stmt = new ExprStmtNode(promoted_sum);
     auto* elif_stmt = new ExprStmtNode(elif_like_expr);
     auto* stmt = new ExprStmtNode(print_call);
     auto* while_loop = new WhileNode(
@@ -67,7 +72,7 @@ void test_semantic(TestRunner& r) {
 
     ProgramNode* prog = new ProgramNode(
         {square_decl},
-        {concat_stmt, elif_stmt, stmt, while_expr_stmt, for_stmt});
+        {concat_stmt, promoted_stmt, elif_stmt, stmt, while_expr_stmt, for_stmt});
 
     SemanticSymbolTable table;
     SemanticAnalyzer analyzer(table);
@@ -101,7 +106,11 @@ void test_semantic(TestRunner& r) {
     }
     EXPECT_TRUE(r, modulo_expr->type != nullptr);
     if (modulo_expr->type) {
-        EXPECT_TRUE(r, modulo_expr->type->equals(NumberType::instance()));
+        EXPECT_TRUE(r, modulo_expr->type->equals(NumberType::instance(NumberKind::Int)));
+    }
+    EXPECT_TRUE(r, promoted_sum->type != nullptr);
+    if (promoted_sum->type) {
+        EXPECT_TRUE(r, promoted_sum->type->equals(NumberType::instance(NumberKind::Double)));
     }
     EXPECT_TRUE(r, bool_condition->type != nullptr);
     if (bool_condition->type) {
@@ -118,7 +127,7 @@ void test_semantic(TestRunner& r) {
     }
     EXPECT_TRUE(r, while_loop->type != nullptr);
     if (while_loop->type) {
-        EXPECT_TRUE(r, while_loop->type->equals(NumberType::instance()));
+        EXPECT_TRUE(r, while_loop->type->equals(NumberType::instance(NumberKind::Int)));
     }
     EXPECT_TRUE(r, for_expr->type != nullptr);
     if (for_expr->type) {

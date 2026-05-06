@@ -3,16 +3,26 @@
 #include <cassert>
 #include <iostream>
 #include <algorithm>
+#include <limits>
 
 // Utility functions
-static std::pair<std::string, std::string> parse_number(const std::optional<std::string>& s) {
-    if (!s) return {"0", "int"};
+static std::pair<std::string, NumberKind> parse_number(const std::optional<std::string>& s) {
+    if (!s) return {"0", NumberKind::Int};
     std::string raw = *s;
-    std::string kind = "int";
     if (raw.find('.') != std::string::npos || raw.find('e') != std::string::npos || raw.find('E') != std::string::npos) {
-        kind = "float";
+        return {raw, NumberKind::Double};
     }
-    return {raw, kind};
+
+    try {
+        long long numericValue = std::stoll(raw);
+        if (numericValue < std::numeric_limits<int>::min() ||
+            numericValue > std::numeric_limits<int>::max()) {
+            return {raw, NumberKind::Long};
+        }
+    } catch (...) {
+        return {raw, NumberKind::Long};
+    }
+    return {raw, NumberKind::Int};
 }
 
 static Type* tokenToType(const Value& v) {

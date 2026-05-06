@@ -135,6 +135,9 @@ class SemanticSymbolTable {
         if (paramType->equals(UnknownType::instance()) || argType->equals(UnknownType::instance())) {
             return true;
         }
+        if (isNumberType(paramType) && isNumberType(argType)) {
+            return areNumberTypesCompatible(paramType, argType);
+        }
         return paramType->equals(argType);
     }
 
@@ -144,6 +147,13 @@ class SemanticSymbolTable {
         }
         if (paramType->equals(argType)) {
             return 0;
+        }
+        if (isNumberType(paramType) && isNumberType(argType)) {
+            auto* expectedNumber = asNumberType(paramType);
+            auto* actualNumber = asNumberType(argType);
+            if (expectedNumber && actualNumber && expectedNumber->isGeneric()) {
+                return actualNumber->isGeneric() ? 0 : 1;
+            }
         }
         if (paramType->equals(AnyType::instance())) {
             return 3;
