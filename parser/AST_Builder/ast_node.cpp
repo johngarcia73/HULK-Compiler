@@ -25,6 +25,7 @@ void print_line(std::ostream& o, int indent_n, const std::string& text) {
 std::string function_signature(
     const std::vector<std::string>& params,
     const std::vector<Type*>& param_types,
+    const std::vector<std::string>& param_type_names,
     Type* return_type) {
     std::ostringstream os;
     os << "(";
@@ -33,7 +34,13 @@ std::string function_signature(
             os << ", ";
         }
         os << params[i] << ": ";
-        os << (i < param_types.size() && param_types[i] ? param_types[i]->toString() : "<unknown>");
+        if (i < param_types.size() && param_types[i]) {
+            os << param_types[i]->toString();
+        } else if (i < param_type_names.size() && !param_type_names[i].empty()) {
+            os << param_type_names[i];
+        } else {
+            os << "<unknown>";
+        }
     }
     os << ") -> " << type_label(return_type);
     return os.str();
@@ -271,15 +278,25 @@ Type* ProgramNode::accept(Visitor& v) {
 // ------------------------------------------------------------
 // ParamListNode
 // ------------------------------------------------------------
-ParamListNode::ParamListNode(std::vector<std::string> p, std::vector<Type*> pt)
-    : params(std::move(p)), paramTypes(std::move(pt)) {}
+ParamListNode::ParamListNode(
+    std::vector<std::string> p,
+    std::vector<Type*> pt,
+    std::vector<std::string> ptn)
+    : params(std::move(p)), paramTypes(std::move(pt)), paramTypeNames(std::move(ptn)) {}
 
 void ParamListNode::print(std::ostream& o, int indent_n) const {
     indent(o, indent_n);
     o << "ParamList(";
     for (size_t i = 0; i < params.size(); ++i) {
         if (i > 0) o << ", ";
-        o << params[i] << " : " << paramTypes[i]->toString();
+        o << params[i] << " : ";
+        if (i < paramTypes.size() && paramTypes[i]) {
+            o << paramTypes[i]->toString();
+        } else if (i < paramTypeNames.size() && !paramTypeNames[i].empty()) {
+            o << paramTypeNames[i];
+        } else {
+            o << "<unknown>";
+        }
     }
     o << ")";
     print_metadata(o, *this);
@@ -303,6 +320,7 @@ FunctionDeclNode::FunctionDeclNode(
     : name(std::move(n)),
       params(std::move(p)),
       paramTypes(std::move(pt)),
+      paramTypeNames(std::vector<std::string>(params.size())),
       returnType(rt),
       declaredReturnType(rt),
       hasExplicitReturnType(rt != nullptr),
@@ -322,6 +340,7 @@ FunctionDeclNode::FunctionDeclNode(
     : name(std::move(n)),
       params(std::move(p)),
       paramTypes(std::move(pt)),
+      paramTypeNames(std::vector<std::string>(params.size())),
       returnType(rt),
       declaredReturnType(rt),
       hasExplicitReturnType(rt != nullptr),
@@ -341,18 +360,28 @@ void FunctionDeclNode::print(std::ostream& o, int indent_n) const {
     o << "FunctionDecl(" << name << ")";
     print_metadata(o, *this);
     o << "\n";
-    print_line(o, indent_n + 2, "Mode: " + std::string(isInline ? "inline" : "block"));
+    std::string mode = isSignatureOnly ? "signature" : (isInline ? "inline" : "block");
+    print_line(o, indent_n + 2, "Mode: " + mode);
     print_line(
         o,
         indent_n + 2,
         "DeclaredReturn: " + std::string(hasExplicitReturnType ? type_label(declaredReturnType) : "<implicit>"));
+    if (hasExplicitReturnType && !declaredReturnTypeName.empty()) {
+        print_line(o, indent_n + 2, "DeclaredReturnName: " + declaredReturnTypeName);
+    }
     print_line(o, indent_n + 2, "ResolvedReturn: " + type_label(returnType));
     print_line(
         o,
         indent_n + 2,
-        "Signature: " + function_signature(params, paramTypes, returnType));
+        "Signature: " + function_signature(params, paramTypes, paramTypeNames, returnType));
     if (inferredFunctionType) {
         print_line(o, indent_n + 2, "InferredFunctionType: " + inferredFunctionType->toString());
+    }
+    if (isMethod) {
+        print_line(o, indent_n + 2, "MethodOwner: " + (ownerTypeName.empty() ? "<unknown>" : ownerTypeName));
+    }
+    if (isProtocolMethod) {
+        print_line(o, indent_n + 2, "ProtocolOwner: " + (ownerProtocolName.empty() ? "<unknown>" : ownerProtocolName));
     }
     indent(o, indent_n + 2);
     o << "Params";
@@ -361,10 +390,16 @@ void FunctionDeclNode::print(std::ostream& o, int indent_n) const {
     } else {
         o << ":\n";
         for (size_t i = 0; i < params.size(); ++i) {
+            std::string type_text = "<unknown>";
+            if (i < paramTypes.size() && paramTypes[i]) {
+                type_text = type_label(paramTypes[i]);
+            } else if (i < paramTypeNames.size() && !paramTypeNames[i].empty()) {
+                type_text = paramTypeNames[i];
+            }
             print_line(
                 o,
                 indent_n + 4,
-                params[i] + ": " + (i < paramTypes.size() ? type_label(paramTypes[i]) : "<unknown>"));
+                params[i] + ": " + type_text);
         }
     }
     print_line(o, indent_n + 2, body ? "Body:" : "Body: <none>");
@@ -384,8 +419,19 @@ Type* FunctionDeclNode::accept(Visitor& v) {
 // ------------------------------------------------------------
 // LetNode
 // ------------------------------------------------------------
-LetNode::LetNode(std::string n, ASTNodePtr i, ASTNodePtr b)
-    : name(std::move(n)), init(i), body(b) {}
+LetNode::LetNode(
+    std::string n,
+    ASTNodePtr i,
+    ASTNodePtr b,
+    Type* dt,
+    std::string dtn,
+    bool explicitType)
+    : name(std::move(n)),
+      declaredType(dt),
+      declaredTypeName(std::move(dtn)),
+      hasExplicitType(explicitType),
+      init(i),
+      body(b) {}
 
 LetNode::~LetNode() {
     delete init;
@@ -397,6 +443,12 @@ void LetNode::print(std::ostream& o, int indent_n) const {
     o << "Let(" << name << ")";
     print_metadata(o, *this);
     o << "\n";
+    if (hasExplicitType || declaredType || !declaredTypeName.empty()) {
+        print_line(
+            o,
+            indent_n + 2,
+            "DeclaredType: " + (!declaredTypeName.empty() ? declaredTypeName : type_label(declaredType)));
+    }
     print_line(o, indent_n + 2, init ? "Init:" : "Init: <none>");
     if (init) init->print(o, indent_n + 4);
     print_line(o, indent_n + 2, body ? "Body:" : "Body: <none>");
@@ -443,10 +495,11 @@ Type* IfNode::accept(Visitor& v) {
 // ------------------------------------------------------------
 // FunctionCallNode
 // ------------------------------------------------------------
-FunctionCallNode::FunctionCallNode(std::string n, std::vector<ASTNodePtr> a)
-    : name(std::move(n)), args(std::move(a)) {}
+FunctionCallNode::FunctionCallNode(std::string n, std::vector<ASTNodePtr> a, ASTNodePtr r)
+    : name(std::move(n)), receiver(r), args(std::move(a)) {}
 
 FunctionCallNode::~FunctionCallNode() {
+    delete receiver;
     for (auto* a : args) delete a;
 }
 
@@ -455,6 +508,10 @@ void FunctionCallNode::print(std::ostream& o, int indent_n) const {
     o << "FunctionCall(" << name << ")";
     print_metadata(o, *this);
     o << "\n";
+    print_line(o, indent_n + 2, receiver ? "Receiver:" : "Receiver: <none>");
+    if (receiver) {
+        receiver->print(o, indent_n + 4);
+    }
     print_line(
         o,
         indent_n + 2,
@@ -478,8 +535,17 @@ Type* FunctionCallNode::accept(Visitor& v) {
 // ------------------------------------------------------------
 // LetBindingNode
 // ------------------------------------------------------------
-LetBindingNode::LetBindingNode(std::string n, ASTNodePtr i)
-    : name(std::move(n)), init(i) {}
+LetBindingNode::LetBindingNode(
+    std::string n,
+    ASTNodePtr i,
+    Type* dt,
+    std::string dtn,
+    bool explicitType)
+    : name(std::move(n)),
+      declaredType(dt),
+      declaredTypeName(std::move(dtn)),
+      hasExplicitType(explicitType),
+      init(i) {}
 
 LetBindingNode::~LetBindingNode() {
     delete init;
@@ -490,7 +556,18 @@ void LetBindingNode::print(std::ostream& o, int indent_n) const {
     o << "LetBinding(" << name << ")";
     print_metadata(o, *this);
     o << "\n";
-    if (init) init->print(o, indent_n + 2);
+    if (hasExplicitType || declaredType || !declaredTypeName.empty()) {
+        print_line(
+            o,
+            indent_n + 2,
+            "DeclaredType: " + (!declaredTypeName.empty() ? declaredTypeName : type_label(declaredType)));
+    }
+    if (init) {
+        print_line(o, indent_n + 2, "Init:");
+        init->print(o, indent_n + 4);
+    } else {
+        print_line(o, indent_n + 2, "Init: <none>");
+    }
 }
 
 Type* LetBindingNode::accept(Visitor& v) {
@@ -523,11 +600,19 @@ Type* LetBindingsNode::accept(Visitor& v) {
 // ------------------------------------------------------------
 // TypeNode
 // ------------------------------------------------------------
-TypeNode::TypeNode(Type* t) : type(t) {}
+TypeNode::TypeNode(Type* t)
+    : typeName(t ? t->toString() : "") {
+    type = t;
+}
+
+TypeNode::TypeNode(std::string name, Type* t)
+    : typeName(std::move(name)) {
+    type = t;
+}
 
 void TypeNode::print(std::ostream& o, int indent_n) const {
     indent(o, indent_n);
-    o << "Type(" << type->toString() << ")";
+    o << "Type(" << (!typeName.empty() ? typeName : type_label(type)) << ")";
     print_metadata(o, *this);
     o << "\n";
 }
@@ -540,18 +625,25 @@ Type* TypeNode::accept(Visitor& v) {
 // AssignmentNode
 // ------------------------------------------------------------
 AssignmentNode::AssignmentNode(std::string t, ASTNodePtr v)
-    : target(std::move(t)), value(v) {}
+    : target(new VariableNode(std::move(t))), value(v) {}
+
+AssignmentNode::AssignmentNode(ASTNodePtr t, ASTNodePtr v)
+    : target(t), value(v) {}
 
 AssignmentNode::~AssignmentNode() {
+    delete target;
     delete value;
 }
 
 void AssignmentNode::print(std::ostream& o, int indent_n) const {
     indent(o, indent_n);
-    o << "Assignment(" << target << ")";
+    o << "Assignment";
     print_metadata(o, *this);
     o << "\n";
-    if (value) value->print(o, indent_n + 2);
+    print_line(o, indent_n + 2, target ? "Target:" : "Target: <none>");
+    if (target) target->print(o, indent_n + 4);
+    print_line(o, indent_n + 2, value ? "Value:" : "Value: <none>");
+    if (value) value->print(o, indent_n + 4);
 }
 
 Type* AssignmentNode::accept(Visitor& v) {
@@ -577,7 +669,7 @@ void MemberAccessNode::print(std::ostream& o, int indent_n) const {
 }
 
 Type* MemberAccessNode::accept(Visitor& v) {
-    throw std::runtime_error("MemberAccessNode::accept not implemented");
+    return v.visit(*this);
 }
 
 // ------------------------------------------------------------
@@ -599,7 +691,7 @@ void NewNode::print(std::ostream& o, int indent_n) const {
 }
 
 Type* NewNode::accept(Visitor& v) {
-    throw std::runtime_error("NewNode::accept not implemented");
+    return v.visit(*this);
 }
 
 // ------------------------------------------------------------
@@ -657,8 +749,17 @@ Type* ForNode::accept(Visitor& v) {
 // ------------------------------------------------------------
 // AttributeDeclNode
 // ------------------------------------------------------------
-AttributeDeclNode::AttributeDeclNode(std::string n, ASTNodePtr i)
-    : name(std::move(n)), init(i) {}
+AttributeDeclNode::AttributeDeclNode(
+    std::string n,
+    ASTNodePtr i,
+    Type* dt,
+    std::string dtn,
+    bool explicitType)
+    : name(std::move(n)),
+      declaredType(dt),
+      declaredTypeName(std::move(dtn)),
+      hasExplicitType(explicitType),
+      init(i) {}
 
 AttributeDeclNode::~AttributeDeclNode() {
     delete init;
@@ -669,20 +770,40 @@ void AttributeDeclNode::print(std::ostream& o, int indent_n) const {
     o << "AttributeDecl(" << name << ")";
     print_metadata(o, *this);
     o << "\n";
-    if (init) init->print(o, indent_n + 2);
+    if (hasExplicitType || declaredType || !declaredTypeName.empty()) {
+        print_line(
+            o,
+            indent_n + 2,
+            "DeclaredType: " + (!declaredTypeName.empty() ? declaredTypeName : type_label(declaredType)));
+    }
+    print_line(o, indent_n + 2, init ? "Init:" : "Init: <none>");
+    if (init) init->print(o, indent_n + 4);
 }
 
 Type* AttributeDeclNode::accept(Visitor& v) {
-    throw std::runtime_error("AttributeDeclNode::accept not implemented");
+    return v.visit(*this);
 }
 
 // ------------------------------------------------------------
 // TypeDeclNode
 // ------------------------------------------------------------
-TypeDeclNode::TypeDeclNode(std::string n, std::vector<std::string> cp, std::string pt, 
-                           std::vector<ASTNodePtr> pa, std::vector<ASTNodePtr> m)
-    : name(std::move(n)), ctorParams(std::move(cp)), parentType(std::move(pt)), 
-      parentArgs(std::move(pa)), members(std::move(m)) {}
+TypeDeclNode::TypeDeclNode(
+    std::string n,
+    std::vector<std::string> cp,
+    std::vector<Type*> cpt,
+    std::vector<std::string> cptn,
+    std::string pt,
+    std::vector<ASTNodePtr> pa,
+    std::vector<ASTNodePtr> m,
+    bool explicitParentArgs)
+    : name(std::move(n)),
+      ctorParams(std::move(cp)),
+      ctorParamTypes(std::move(cpt)),
+      ctorParamTypeNames(std::move(cptn)),
+      parentType(std::move(pt)),
+      parentArgs(std::move(pa)),
+      hasExplicitParentArgs(explicitParentArgs),
+      members(std::move(m)) {}
 
 TypeDeclNode::~TypeDeclNode() {
     for (auto* pa : parentArgs) delete pa;
@@ -696,10 +817,26 @@ void TypeDeclNode::print(std::ostream& o, int indent_n) const {
     o << "\n";
     indent(o, indent_n + 2);
     o << "CtorParams:";
-    for (auto& p : ctorParams) o << " " << p;
-    o << "\n";
+    if (ctorParams.empty()) {
+        o << " <none>\n";
+    } else {
+        o << "\n";
+        for (size_t i = 0; i < ctorParams.size(); ++i) {
+            std::string type_text = "<unknown>";
+            if (i < ctorParamTypes.size() && ctorParamTypes[i]) {
+                type_text = type_label(ctorParamTypes[i]);
+            } else if (i < ctorParamTypeNames.size() && !ctorParamTypeNames[i].empty()) {
+                type_text = ctorParamTypeNames[i];
+            }
+            print_line(o, indent_n + 4, ctorParams[i] + ": " + type_text);
+        }
+    }
     indent(o, indent_n + 2);
     o << "ParentType: " << parentType << "\n";
+    print_line(
+        o,
+        indent_n + 2,
+        std::string("ParentArgsMode: ") + (hasExplicitParentArgs ? "explicit" : "implicit"));
     if (!parentArgs.empty()) {
         indent(o, indent_n + 2);
         o << "ParentArgs:\n";
@@ -713,7 +850,7 @@ void TypeDeclNode::print(std::ostream& o, int indent_n) const {
 }
 
 Type* TypeDeclNode::accept(Visitor& v) {
-    throw std::runtime_error("TypeDeclNode::accept not implemented");
+    return v.visit(*this);
 }
 
 // ------------------------------------------------------------
@@ -741,7 +878,7 @@ void ProtocolDeclNode::print(std::ostream& o, int indent_n) const {
 }
 
 Type* ProtocolDeclNode::accept(Visitor& v) {
-    throw std::runtime_error("ProtocolDeclNode::accept not implemented");
+    return v.visit(*this);
 }
 
 

@@ -16,13 +16,19 @@ class BoolNode;
 class BinaryOpNode;
 class ExprStmtNode;
 class AssignmentNode;
+class MemberAccessNode;
+class NewNode;
 class WhileNode;
 class ForNode;
+class AttributeDeclNode;
+class TypeDeclNode;
+class ProtocolDeclNode;
 class ParamListNode;
 class LetBindingNode;
 class LetBindingsNode;
 class UnaryOpNode;
 class TypeNode;
+class ReturnNode;
 
 
 class Visitor {
@@ -40,8 +46,13 @@ public:
     virtual Type* visit(BinaryOpNode& node) = 0;
     virtual Type* visit(ExprStmtNode& node) = 0;
     virtual Type* visit(AssignmentNode& node) = 0;
+    virtual Type* visit(MemberAccessNode& node) = 0;
+    virtual Type* visit(NewNode& node) = 0;
     virtual Type* visit(WhileNode& node) = 0;
     virtual Type* visit(ForNode& node) = 0;
+    virtual Type* visit(AttributeDeclNode& node) = 0;
+    virtual Type* visit(TypeDeclNode& node) = 0;
+    virtual Type* visit(ProtocolDeclNode& node) = 0;
     virtual Type* visit(ParamListNode& node) = 0;
     virtual Type* visit(LetBindingNode& node) = 0;
     virtual Type* visit(LetBindingsNode& node) = 0;

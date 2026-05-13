@@ -7,6 +7,11 @@
 
 enum class TokenType : int {
     TOKEN_FUNCTION = 0,
+    TOKEN_TYPE,
+    TOKEN_PROTOCOL,
+    TOKEN_INHERITS,
+    TOKEN_EXTENDS,
+    TOKEN_NEW,
     TOKEN_NUMBER_TYPE, 
     TOKEN_BOOL_TYPE,  
     TOKEN_STRING_TYPE,
@@ -20,6 +25,8 @@ enum class TokenType : int {
     TOKEN_RETURN,
     TOKEN_TRUE,
     TOKEN_FALSE,
+    TOKEN_IS,
+    TOKEN_AS,
     
     TOKEN_NUMBER,
     TOKEN_STRING,
@@ -50,6 +57,7 @@ enum class TokenType : int {
     TOKEN_WHITESPACE,
     TOKEN_NEWLINE,
     TOKEN_COLON,
+    TOKEN_DOT,
     TOKEN_EOF,
     TOKEN_UNKNOWN
 };
@@ -76,6 +84,11 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_NUMBER_TYPE:  return "NUMBER_TYPE";
         case TokenType::TOKEN_BOOL_TYPE:    return "BOOL_TYPE";
         case TokenType::TOKEN_STRING_TYPE:  return "STRING_TYPE";
+        case TokenType::TOKEN_TYPE:         return "TYPE";
+        case TokenType::TOKEN_PROTOCOL:     return "PROTOCOL";
+        case TokenType::TOKEN_INHERITS:     return "INHERITS";
+        case TokenType::TOKEN_EXTENDS:      return "EXTENDS";
+        case TokenType::TOKEN_NEW:          return "NEW";
         case TokenType::TOKEN_NUMBER:       return "NUMBER";
         case TokenType::TOKEN_STRING:       return "STRING";
         case TokenType::TOKEN_MODULE:       return "MODULE";
@@ -104,6 +117,8 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_RETURN:       return "RETURN";
         case TokenType::TOKEN_TRUE:         return "TRUE";
         case TokenType::TOKEN_FALSE:        return "FALSE";
+        case TokenType::TOKEN_IS:           return "IS";
+        case TokenType::TOKEN_AS:           return "AS";
         case TokenType::TOKEN_EQUALITY:     return "EQUALITY";
         case TokenType::TOKEN_NOT_EQUAL:    return "NOT_EQUAL";
         case TokenType::TOKEN_EQUAL:        return "EQUAL";
@@ -116,6 +131,7 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_LESS_EQUALS: return "LESS_EQUALS";
         case TokenType::TOKEN_GREATER_EQUALS: return "GREATER_EQUALS";
         case TokenType::TOKEN_COLON:        return "COLON";
+        case TokenType::TOKEN_DOT:          return "DOT";
         case TokenType::TOKEN_EOF:          return "$";
         default:                            return "UNKNOWN";
     }
@@ -133,6 +149,11 @@ inline std::vector<TokenSpec> default_token_specs() {
     return {
         // Keywords
         { TokenType::TOKEN_FUNCTION, "function", false },
+        { TokenType::TOKEN_TYPE, "type", false },
+        { TokenType::TOKEN_PROTOCOL, "protocol", false },
+        { TokenType::TOKEN_INHERITS, "inherits", false },
+        { TokenType::TOKEN_EXTENDS, "extends", false },
+        { TokenType::TOKEN_NEW, "new", false },
         { TokenType::TOKEN_NUMBER_TYPE, "Number", false },
         { TokenType::TOKEN_BOOL_TYPE,   "Bool",   false },
         { TokenType::TOKEN_STRING_TYPE, "String", false },
@@ -146,6 +167,8 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_RETURN,   "return",   false },
         { TokenType::TOKEN_TRUE,     "true",     false },
         { TokenType::TOKEN_FALSE,    "false",    false },
+        { TokenType::TOKEN_IS,       "is",       false },
+        { TokenType::TOKEN_AS,       "as",       false },
 
         { TokenType::TOKEN_STRING,   R"("([^"\\]|\\.)*")", false },
 
@@ -176,6 +199,7 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_SEMICOLON, ";", false },
         { TokenType::TOKEN_COMMA,    ",", false },
         { TokenType::TOKEN_COLON,    ":", false },
+        { TokenType::TOKEN_DOT,      ".", false },
 
         // Identifiers
         { TokenType::TOKEN_IDENTIFIER, "[a-zA-Z_][a-zA-Z0-9_]*", false },

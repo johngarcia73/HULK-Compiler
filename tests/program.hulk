@@ -89,4 +89,50 @@ let a = 10 in while (a >= 0) {
     a := a - 1;
 };
 
+type Point(x: Number, y: Number) {
+    x: Number = x;
+    y: Number = y;
+    getX(): Number => self.x;
+    getY(): Number => self.y;
+    describe(): String => "Point(" @ self.getX() @ ", " @ self.getY() @ ")";
+}
+
+type LabeledPoint(x: Number, y: Number, label: String) inherits Point(x, y) {
+    label: String = label;
+    describe(): String => base() @ " " @ self.label;
+}
+
+let point: Point = new Point(3, 4) in print(point.describe());
+
+let obj: Point = new LabeledPoint(1, 2, "A") in
+    print(if (obj is LabeledPoint) (obj as LabeledPoint).describe() else "none");
+
+protocol Hashable {
+    hash(): Number;
+}
+
+protocol Named extends Hashable {
+    describe(): String;
+}
+
+type Person(name: String) {
+    name: String = name;
+    hash(): Number => 1;
+    describe(): String => self.name;
+}
+
+function showNamed(item: Named): String => item.describe();
+function hashValue(item: Hashable): Number => item.hash();
+function twice(n) => n + n;
+
+type Counter(seed) {
+    current = seed + 1;
+    value(): Number => self.current;
+}
+
+let person: Named = new Person("Ada") in print(showNamed(person));
+let alias: Hashable = new Person("Grace") in print(hashValue(alias));
+print(twice(21));
+let counter = new Counter(4) in print(counter.value());
+
 123+12.8;

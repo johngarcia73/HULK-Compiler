@@ -8,14 +8,25 @@
 #include "../../parser/AST_Builder/ast_node.hpp"
 #include "../../lexer/tokens.hpp"
 #include "../../common/token.hpp"
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
 
 namespace {
 
+std::string resolve_path(std::initializer_list<const char*> candidates) {
+    for (const char* candidate : candidates) {
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+    }
+    throw std::runtime_error("Cannot resolve project test path.");
+}
+
 ParseResult parse_with_project_grammar(const std::vector<Token>& raw_tokens) {
-    Grammar grammar = build_grammar_from_file("../parser/Parser_Generator/grammar.y");
+    Grammar grammar = build_grammar_from_file(
+        resolve_path({"../parser/Parser_Generator/grammar.y", "parser/Parser_Generator/grammar.y"}));
 
     std::unordered_map<std::string, uint32_t> name_to_id;
     for (size_t i = 0; i < grammar.symtab.size(); ++i) {
@@ -23,7 +34,7 @@ ParseResult parse_with_project_grammar(const std::vector<Token>& raw_tokens) {
     }
 
     LALRParser parser = LALRParser::from_grammar(grammar, name_to_id.at("$"));
-    parser.set_builder(std::make_unique<ASTBuilder>());
+    parser.set_builder(std::make_unique<ASTBuilder>(&grammar));
 
     std::vector<Token> tokens;
     for (const auto& token : raw_tokens) {
@@ -389,7 +400,11 @@ void test_parser(TestRunner& r) {
                                 auto* assign = dynamic_cast<AssignmentNode*>(assign_stmt->expr);
                                 EXPECT_TRUE(r, assign != nullptr);
                                 if (assign) {
-                                    EXPECT_EQ(r, assign->target, std::string("a"));
+                                    auto* target = dynamic_cast<VariableNode*>(assign->target);
+                                    EXPECT_TRUE(r, target != nullptr);
+                                    if (target) {
+                                        EXPECT_EQ(r, target->name, std::string("a"));
+                                    }
                                 }
                             }
                         }
@@ -473,6 +488,272 @@ void test_parser(TestRunner& r) {
                 EXPECT_TRUE(r, iterable != nullptr);
                 auto* body_stmt = dynamic_cast<ExprStmtNode*>(for_node->body);
                 EXPECT_TRUE(r, body_stmt != nullptr);
+            }
+        }
+    }
+
+    ParseResult type_decl_res = parse_with_project_grammar({
+        raw_token(TokenType::TOKEN_TYPE, "type"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "Point"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_COMMA, ","),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "y"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_L_CURL_BRACK, "{"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "y"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "y"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "getX"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_ARROW, "=>"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "self"),
+        raw_token(TokenType::TOKEN_DOT, "."),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_R_CURL_BRACK, "}"),
+        raw_token(TokenType::TOKEN_LET, "let"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "pt"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "Point"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_NEW, "new"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "Point"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_NUMBER, "3"),
+        raw_token(TokenType::TOKEN_COMMA, ","),
+        raw_token(TokenType::TOKEN_NUMBER, "4"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_IN, "in"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "pt"),
+        raw_token(TokenType::TOKEN_DOT, "."),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "getX"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";")
+    });
+    EXPECT_TRUE(r, type_decl_res.is_success());
+    if (type_decl_res.is_success()) {
+        auto* program = dynamic_cast<ProgramNode*>(type_decl_res.ast.get());
+        EXPECT_TRUE(r, program != nullptr);
+        if (program) {
+            EXPECT_EQ(r, program->decls.size(), (size_t)1);
+            EXPECT_EQ(r, program->stmts.size(), (size_t)1);
+            if (program->decls.size() == 1) {
+                auto* point = dynamic_cast<TypeDeclNode*>(program->decls[0]);
+                EXPECT_TRUE(r, point != nullptr);
+                if (point) {
+                    EXPECT_EQ(r, point->name, std::string("Point"));
+                    EXPECT_EQ(r, point->ctorParams.size(), (size_t)2);
+                    EXPECT_EQ(r, point->ctorParamTypeNames.size(), (size_t)2);
+                    EXPECT_EQ(r, point->ctorParamTypeNames[0], std::string("Number"));
+                    EXPECT_EQ(r, point->members.size(), (size_t)3);
+                    auto* attrX = dynamic_cast<AttributeDeclNode*>(point->members[0]);
+                    auto* getX = dynamic_cast<FunctionDeclNode*>(point->members[2]);
+                    EXPECT_TRUE(r, attrX != nullptr);
+                    EXPECT_TRUE(r, getX != nullptr);
+                    if (attrX) {
+                        EXPECT_TRUE(r, attrX->hasExplicitType);
+                        EXPECT_EQ(r, attrX->declaredTypeName, std::string("Number"));
+                    }
+                    if (getX) {
+                        EXPECT_TRUE(r, getX->isMethod);
+                        EXPECT_EQ(r, getX->ownerTypeName, std::string("Point"));
+                        auto* body = dynamic_cast<MemberAccessNode*>(getX->exprBody);
+                        EXPECT_TRUE(r, body != nullptr);
+                        if (body) {
+                            auto* selfVar = dynamic_cast<VariableNode*>(body->base);
+                            EXPECT_TRUE(r, selfVar != nullptr);
+                            if (selfVar) {
+                                EXPECT_EQ(r, selfVar->name, std::string("self"));
+                            }
+                            EXPECT_EQ(r, body->member, std::string("x"));
+                        }
+                    }
+                }
+            }
+            if (program->stmts.size() == 1) {
+                auto* exprStmt = dynamic_cast<ExprStmtNode*>(program->stmts[0]);
+                EXPECT_TRUE(r, exprStmt != nullptr);
+                if (exprStmt) {
+                    auto* letNode = dynamic_cast<LetNode*>(exprStmt->expr);
+                    EXPECT_TRUE(r, letNode != nullptr);
+                    if (letNode) {
+                        EXPECT_TRUE(r, letNode->hasExplicitType);
+                        EXPECT_EQ(r, letNode->declaredTypeName, std::string("Point"));
+                        auto* newNode = dynamic_cast<NewNode*>(letNode->init);
+                        auto* callNode = dynamic_cast<FunctionCallNode*>(letNode->body);
+                        EXPECT_TRUE(r, newNode != nullptr);
+                        EXPECT_TRUE(r, callNode != nullptr);
+                        if (newNode) {
+                            EXPECT_EQ(r, newNode->typeName, std::string("Point"));
+                            EXPECT_EQ(r, newNode->args.size(), (size_t)2);
+                        }
+                        if (callNode) {
+                            EXPECT_EQ(r, callNode->name, std::string("getX"));
+                            EXPECT_TRUE(r, callNode->receiver != nullptr);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ParseResult inheritance_res = parse_with_project_grammar({
+        raw_token(TokenType::TOKEN_TYPE, "type"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "Point"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_L_CURL_BRACK, "{"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_R_CURL_BRACK, "}"),
+        raw_token(TokenType::TOKEN_TYPE, "type"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "PolarPoint"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "phi"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_COMMA, ","),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "rho"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_INHERITS, "inherits"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "Point"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "rho"),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_L_CURL_BRACK, "{"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "rhoValue"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_ARROW, "=>"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "rho"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_R_CURL_BRACK, "}")
+    });
+    EXPECT_TRUE(r, inheritance_res.is_success());
+    if (inheritance_res.is_success()) {
+        auto* program = dynamic_cast<ProgramNode*>(inheritance_res.ast.get());
+        EXPECT_TRUE(r, program != nullptr);
+        if (program && program->decls.size() == 2) {
+            auto* polar = dynamic_cast<TypeDeclNode*>(program->decls[1]);
+            EXPECT_TRUE(r, polar != nullptr);
+            if (polar) {
+                EXPECT_EQ(r, polar->parentType, std::string("Point"));
+                EXPECT_TRUE(r, polar->hasExplicitParentArgs);
+                EXPECT_EQ(r, polar->parentArgs.size(), (size_t)1);
+            }
+        }
+    }
+
+    ParseResult protocol_res = parse_with_project_grammar({
+        raw_token(TokenType::TOKEN_PROTOCOL, "protocol"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "Hashable"),
+        raw_token(TokenType::TOKEN_L_CURL_BRACK, "{"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "hash"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_NUMBER_TYPE, "Number"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_R_CURL_BRACK, "}"),
+        raw_token(TokenType::TOKEN_PROTOCOL, "protocol"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "Named"),
+        raw_token(TokenType::TOKEN_EXTENDS, "extends"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "Hashable"),
+        raw_token(TokenType::TOKEN_L_CURL_BRACK, "{"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "describe"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_STRING_TYPE, "String"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";"),
+        raw_token(TokenType::TOKEN_R_CURL_BRACK, "}"),
+        raw_token(TokenType::TOKEN_LET, "let"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_COLON, ":"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "Named"),
+        raw_token(TokenType::TOKEN_EQUAL, "="),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "source"),
+        raw_token(TokenType::TOKEN_IN, "in"),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "x"),
+        raw_token(TokenType::TOKEN_DOT, "."),
+        raw_token(TokenType::TOKEN_IDENTIFIER, "describe"),
+        raw_token(TokenType::TOKEN_LPAREN, "("),
+        raw_token(TokenType::TOKEN_RPAREN, ")"),
+        raw_token(TokenType::TOKEN_SEMICOLON, ";")
+    });
+    EXPECT_TRUE(r, protocol_res.is_success());
+    if (protocol_res.is_success()) {
+        auto* program = dynamic_cast<ProgramNode*>(protocol_res.ast.get());
+        EXPECT_TRUE(r, program != nullptr);
+        if (program) {
+            EXPECT_EQ(r, program->decls.size(), (size_t)2);
+            EXPECT_EQ(r, program->stmts.size(), (size_t)1);
+            if (program->decls.size() == 2) {
+                auto* hashable = dynamic_cast<ProtocolDeclNode*>(program->decls[0]);
+                auto* named = dynamic_cast<ProtocolDeclNode*>(program->decls[1]);
+                EXPECT_TRUE(r, hashable != nullptr);
+                EXPECT_TRUE(r, named != nullptr);
+                if (hashable) {
+                    EXPECT_EQ(r, hashable->name, std::string("Hashable"));
+                    EXPECT_EQ(r, hashable->methods.size(), (size_t)1);
+                }
+                if (named) {
+                    EXPECT_EQ(r, named->extendedProtocol, std::string("Hashable"));
+                    EXPECT_EQ(r, named->methods.size(), (size_t)1);
+                    auto* describe = dynamic_cast<FunctionDeclNode*>(named->methods[0]);
+                    EXPECT_TRUE(r, describe != nullptr);
+                    if (describe) {
+                        EXPECT_TRUE(r, describe->isSignatureOnly);
+                        EXPECT_TRUE(r, describe->isProtocolMethod);
+                        EXPECT_EQ(r, describe->declaredReturnTypeName, std::string("String"));
+                    }
+                }
+            }
+            if (program->stmts.size() == 1) {
+                auto* exprStmt = dynamic_cast<ExprStmtNode*>(program->stmts[0]);
+                EXPECT_TRUE(r, exprStmt != nullptr);
+                if (exprStmt) {
+                    auto* letNode = dynamic_cast<LetNode*>(exprStmt->expr);
+                    EXPECT_TRUE(r, letNode != nullptr);
+                    if (letNode) {
+                        EXPECT_EQ(r, letNode->declaredTypeName, std::string("Named"));
+                        auto* callNode = dynamic_cast<FunctionCallNode*>(letNode->body);
+                        EXPECT_TRUE(r, callNode != nullptr);
+                        if (callNode) {
+                            EXPECT_EQ(r, callNode->name, std::string("describe"));
+                            EXPECT_TRUE(r, callNode->receiver != nullptr);
+                        }
+                    }
+                }
             }
         }
     }

@@ -1,4 +1,4 @@
-%token FUNCTION
+%token FUNCTION TYPE PROTOCOL INHERITS EXTENDS NEW IS AS
 %token L_PAREN R_PAREN
 %token L_CURL_BRACK R_CURL_BRACK
 %token SEMICOLON
@@ -20,6 +20,7 @@
 %token EQUAL
 %token EOF 0
 %token COLON
+%token DOT
 %token ARROW "=>"
 %token RETURN
 
@@ -27,7 +28,7 @@
 
 %left OR
 %left AND
-%nonassoc LESS_THAN GREATER_THAN LESS_EQUALS GREATER_EQUALS EQUALITY NOT_EQUAL
+%nonassoc EQUALITY NOT_EQUAL LESS_THAN GREATER_THAN LESS_EQUALS GREATER_EQUALS IS AS
 %left CONCAT
 %left PLUS MINUS
 %left STAR SLASH MODULE
@@ -45,21 +46,65 @@ top_level_item : declaration
                | statement
 
 declaration : function_decl
+            | type_decl
+            | protocol_decl
 
 function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN block
               | FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type block
               | FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN ARROW expr SEMICOLON
               | FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type ARROW expr SEMICOLON
 
+type_decl : TYPE IDENTIFIER ctor_param_clause_opt inheritance_clause type_body
+
+protocol_decl : PROTOCOL IDENTIFIER protocol_extension_clause protocol_body
+
+ctor_param_clause_opt : /* empty */
+                      | L_PAREN param_list_opt R_PAREN
+
+inheritance_clause : /* empty */
+                   | INHERITS IDENTIFIER
+                   | INHERITS IDENTIFIER L_PAREN arg_list_opt R_PAREN
+
+protocol_extension_clause : /* empty */
+                          | EXTENDS IDENTIFIER
+
+type_body : L_CURL_BRACK type_members R_CURL_BRACK
+
+protocol_body : L_CURL_BRACK protocol_methods R_CURL_BRACK
+
+type_members : /* empty */
+             | type_members type_member
+
+protocol_methods : /* empty */
+                 | protocol_methods protocol_method_decl
+
+type_member : attribute_decl
+            | method_decl
+
+protocol_method_decl : IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type SEMICOLON
+
+attribute_decl : IDENTIFIER opt_type_annotation EQUAL expr SEMICOLON
+
+method_decl : IDENTIFIER L_PAREN param_list_opt R_PAREN block
+            | IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type block
+            | IDENTIFIER L_PAREN param_list_opt R_PAREN ARROW expr SEMICOLON
+            | IDENTIFIER L_PAREN param_list_opt R_PAREN COLON type ARROW expr SEMICOLON
+
 param_list_opt : /* empty */
                | param_list
 
-param_list : IDENTIFIER COLON type
-           | param_list COMMA IDENTIFIER COLON type
+param_list : param_decl
+           | param_list COMMA param_decl
+
+param_decl : IDENTIFIER opt_type_annotation
+
+opt_type_annotation : /* empty */
+                    | COLON type
 
 type : NUMBER_TYPE
      | BOOL_TYPE
      | STRING_TYPE
+     | IDENTIFIER
 
 statement : assignment SEMICOLON
           | let_expr SEMICOLON
@@ -107,10 +152,12 @@ expr : assignment
      | if_expr
      | while_expr
      | for_expr
-     /* call_expr eliminado de aquí */
 
 assignment : logical_or
-           | IDENTIFIER COLON EQUAL expr
+           | assignable COLON EQUAL expr
+
+assignable : IDENTIFIER
+           | member_access
 
 logical_or : logical_and
            | logical_or OR logical_and
@@ -118,9 +165,13 @@ logical_or : logical_and
 logical_and : equality
             | logical_and AND equality
 
-equality : relational
-         | relational EQUALITY relational
-         | relational NOT_EQUAL relational
+equality : type_relation
+         | type_relation EQUALITY type_relation
+         | type_relation NOT_EQUAL type_relation
+
+type_relation : relational
+              | relational IS type
+              | relational AS type
 
 relational : concatenation
            | concatenation LESS_THAN concatenation
@@ -150,16 +201,33 @@ primary : NUMBER
         | TRUE
         | FALSE
         | IDENTIFIER
-        | IDENTIFIER L_PAREN arg_list_opt R_PAREN   /* NUEVA: llamada a función */
+        | global_call
+        | member_call
+        | member_access
+        | new_expr
         | L_PAREN expr R_PAREN
+
+global_call : IDENTIFIER L_PAREN arg_list_opt R_PAREN
+
+member_access : access_base DOT IDENTIFIER
+              | member_access DOT IDENTIFIER
+
+access_base : IDENTIFIER
+            | new_expr
+            | L_PAREN expr R_PAREN
+
+member_call : access_base DOT IDENTIFIER L_PAREN arg_list_opt R_PAREN
+            | member_access DOT IDENTIFIER L_PAREN arg_list_opt R_PAREN
+
+new_expr : NEW IDENTIFIER L_PAREN arg_list_opt R_PAREN
 
 let_expr : LET let_bindings IN loop_expr_body
 
 let_bindings : let_binding
              | let_bindings COMMA let_binding
 
-let_binding : IDENTIFIER EQUAL expr
-            | LET IDENTIFIER EQUAL expr
+let_binding : IDENTIFIER opt_type_annotation EQUAL expr
+            | LET IDENTIFIER opt_type_annotation EQUAL expr
 
 if_expr : IF L_PAREN expr R_PAREN conditional_expr_body conditional_expr_tail
 
@@ -176,10 +244,6 @@ for_expr : FOR L_PAREN IDENTIFIER IN expr R_PAREN loop_expr_body
 
 loop_expr_body : block
                | expr
-
-/* call_expr se mantiene por compatibilidad con el AST builder,
-   pero ya no es alcanzable desde expr. */
-call_expr : IDENTIFIER L_PAREN arg_list_opt R_PAREN
 
 arg_list_opt : /* empty */
              | arg_list

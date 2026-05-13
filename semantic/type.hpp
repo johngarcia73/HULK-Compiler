@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <unordered_set>
 
 enum class NumberKind {
     Int,
@@ -43,6 +44,59 @@ public:
     virtual ~Type() = default;
     virtual std::string toString() const = 0;
     virtual bool equals(const Type* other) const = 0;
+};
+
+class ObjectType : public Type {
+public:
+    static ObjectType* instance() {
+        static ObjectType inst;
+        return &inst;
+    }
+
+    std::string toString() const override { return "Object"; }
+    bool equals(const Type* other) const override {
+        return dynamic_cast<const ObjectType*>(other) != nullptr;
+    }
+
+private:
+    ObjectType() = default;
+};
+
+class NominalType : public Type {
+    std::string name_;
+    Type* parent_ = ObjectType::instance();
+
+public:
+    explicit NominalType(std::string name, Type* parent = ObjectType::instance())
+        : name_(std::move(name)), parent_(parent ? parent : ObjectType::instance()) {}
+
+    std::string toString() const override { return name_; }
+    bool equals(const Type* other) const override {
+        auto* nominal = dynamic_cast<const NominalType*>(other);
+        return nominal && nominal->name_ == name_;
+    }
+
+    const std::string& name() const { return name_; }
+    Type* parent() const { return parent_; }
+    void setParent(Type* parent) {
+        parent_ = parent ? parent : ObjectType::instance();
+    }
+};
+
+class ProtocolType : public Type {
+    std::string name_;
+
+public:
+    explicit ProtocolType(std::string name)
+        : name_(std::move(name)) {}
+
+    std::string toString() const override { return name_; }
+    bool equals(const Type* other) const override {
+        auto* protocol = dynamic_cast<const ProtocolType*>(other);
+        return protocol && protocol->name_ == name_;
+    }
+
+    const std::string& name() const { return name_; }
 };
 
 class NumberType : public Type {
@@ -113,6 +167,26 @@ inline bool isNumberType(const Type* type) {
     return asNumberType(type) != nullptr;
 }
 
+inline const NominalType* asNominalType(const Type* type) {
+    return dynamic_cast<const NominalType*>(type);
+}
+
+inline NominalType* asNominalType(Type* type) {
+    return dynamic_cast<NominalType*>(type);
+}
+
+inline const ProtocolType* asProtocolType(const Type* type) {
+    return dynamic_cast<const ProtocolType*>(type);
+}
+
+inline ProtocolType* asProtocolType(Type* type) {
+    return dynamic_cast<ProtocolType*>(type);
+}
+
+inline bool isProtocolType(const Type* type) {
+    return asProtocolType(type) != nullptr;
+}
+
 inline Type* commonNumberType(Type* left, Type* right) {
     auto* leftNumber = asNumberType(left);
     auto* rightNumber = asNumberType(right);
@@ -150,7 +224,7 @@ public:
         static BoolType inst;
         return &inst;
     }
-    std::string toString() const override { return "bool"; }
+    std::string toString() const override { return "Bool"; }
     bool equals(const Type* other) const override {
         return dynamic_cast<const BoolType*>(other) != nullptr;
     }
@@ -186,8 +260,14 @@ public:
         return returnType->equals(otherFunc->returnType);
     }
     const std::vector<Type*>& getParamTypes() const { return paramTypes; }
+    std::vector<Type*>& mutableParamTypes() { return paramTypes; }
     Type* getReturnType() const { return returnType; }
     void setReturnType(Type* t) { returnType = t; }
+    void setParamType(size_t index, Type* type) {
+        if (index < paramTypes.size()) {
+            paramTypes[index] = type;
+        }
+    }
 
 };
 
@@ -231,3 +311,114 @@ public:
 private:
     AnyType() = default;
 };
+
+inline bool isObjectLikeType(const Type* type) {
+    return dynamic_cast<const ObjectType*>(type) != nullptr ||
+           dynamic_cast<const NominalType*>(type) != nullptr ||
+           dynamic_cast<const ProtocolType*>(type) != nullptr ||
+           isNumberType(type) ||
+           dynamic_cast<const StringType*>(type) != nullptr ||
+           dynamic_cast<const BoolType*>(type) != nullptr;
+}
+
+inline bool typeConforms(const Type* actual, const Type* expected) {
+    if (!actual || !expected) {
+        return false;
+    }
+    if (actual->equals(UnknownType::instance()) || expected->equals(UnknownType::instance())) {
+        return true;
+    }
+    if (actual->equals(AnyType::instance()) || expected->equals(AnyType::instance())) {
+        return true;
+    }
+    if (actual->equals(expected)) {
+        return true;
+    }
+    if (expected->equals(ObjectType::instance()) && !actual->equals(VoidType::instance())) {
+        return isObjectLikeType(actual);
+    }
+    if (isNumberType(expected) && isNumberType(actual)) {
+        return areNumberTypesCompatible(expected, actual);
+    }
+    if (isProtocolType(expected) || isProtocolType(actual)) {
+        return actual->equals(expected);
+    }
+    if (dynamic_cast<const StringType*>(expected) || dynamic_cast<const BoolType*>(expected)) {
+        return actual->equals(expected);
+    }
+
+    auto* actualNominal = asNominalType(actual);
+    if (actualNominal) {
+        std::unordered_set<std::string> seen;
+        const Type* cursor = actualNominal;
+        while (cursor && !seen.count(cursor->toString())) {
+            seen.insert(cursor->toString());
+            if (cursor->equals(expected)) {
+                return true;
+            }
+            auto* nominalCursor = asNominalType(cursor);
+            cursor = nominalCursor ? nominalCursor->parent() : nullptr;
+        }
+    }
+    return false;
+}
+
+inline Type* lowestCommonAncestor(Type* left, Type* right) {
+    if (!left) {
+        return right;
+    }
+    if (!right) {
+        return left;
+    }
+    if (left->equals(UnknownType::instance())) {
+        return right;
+    }
+    if (right->equals(UnknownType::instance())) {
+        return left;
+    }
+    if (left->equals(right)) {
+        return left;
+    }
+    if (isNumberType(left) && isNumberType(right)) {
+        return commonNumberType(left, right);
+    }
+    if (isProtocolType(left) || isProtocolType(right)) {
+        if (left->equals(right)) {
+            return left;
+        }
+        if (isObjectLikeType(left) && isObjectLikeType(right)) {
+            return ObjectType::instance();
+        }
+        return UnknownType::instance();
+    }
+    if (typeConforms(left, right)) {
+        return right;
+    }
+    if (typeConforms(right, left)) {
+        return left;
+    }
+
+    auto* leftNominal = asNominalType(left);
+    auto* rightNominal = asNominalType(right);
+    if (leftNominal && rightNominal) {
+        std::unordered_set<std::string> ancestors;
+        for (Type* cursor = leftNominal; cursor; ) {
+            ancestors.insert(cursor->toString());
+            auto* nominalCursor = asNominalType(cursor);
+            cursor = nominalCursor ? nominalCursor->parent() : nullptr;
+        }
+        for (Type* cursor = rightNominal; cursor; ) {
+            if (ancestors.count(cursor->toString())) {
+                return cursor;
+            }
+            auto* nominalCursor = asNominalType(cursor);
+            cursor = nominalCursor ? nominalCursor->parent() : nullptr;
+        }
+        return ObjectType::instance();
+    }
+
+    if (isObjectLikeType(left) && isObjectLikeType(right)) {
+        return ObjectType::instance();
+    }
+    return UnknownType::instance();
+}
