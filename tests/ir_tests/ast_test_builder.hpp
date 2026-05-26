@@ -16,7 +16,7 @@ namespace ASTTestBuilder {
     // ============================================================================
     // Basic Node Factories (Terminal nodes & simple expressions)
     // ============================================================================
-    inline NumberNode* makeNumber(long long value) {
+    inline NumberNode* makeNumber(std::string value) {
         return new NumberNode(value);
     }
 

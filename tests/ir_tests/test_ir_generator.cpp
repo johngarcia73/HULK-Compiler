@@ -47,8 +47,8 @@ ProgramNode* test_conditionals()
             makeIfExpression(
                 makeBinaryOperation(
                     ">",
-                    makeNumber(5),
-                    makeNumber(10)
+                    makeNumber("5"),
+                    makeNumber("10")
                 ),
                 buildFunctionCall("print")
                     .addArgument(makeString("Five is greather"))
@@ -76,8 +76,8 @@ ProgramNode* test_function_decl()
         )
         .addStatement(
                     buildFunctionCall("add")
-                        .addArgument(makeNumber(5))
-                        .addArgument(makeNumber(10))
+                        .addArgument(makeNumber("5"))
+                        .addArgument(makeNumber("10"))
                     .build()
         )
         .build();
@@ -101,6 +101,34 @@ ProgramNode* test_string_concat()
                     )
                 )
                 .build()
+        )
+        .build();
+    return program;
+}
+
+ProgramNode* test_while_loop()
+{
+    auto program = buildProgram()
+        .addStatement(
+            makeLetExpression(
+                "i",
+                makeNumber("0"),
+                buildBlock()
+                    .addExpression(
+                        makeWhileLoop(
+                            makeBinaryOperation("<", makeVariable("i"), makeNumber("5")),
+                            buildBlock()
+                                .addExpression(
+                                    makeAssignment(
+                                        "i",
+                                        makeBinaryOperation("+", makeVariable("i"), makeNumber("1"))
+                                    )
+                                )
+                                .build()
+                        )
+                    )
+                    .build()
+            )
         )
         .build();
     return program;
@@ -134,6 +162,13 @@ void run_snapshot_tests(SnapshotRunner& runner) {
     std::string out4 = generator4.generate(*p4);
     EXPECT_SNAPSHOT(runner, out4, "tests/ir_tests/snapshots/string_concat.ssa");
     delete p4;
+
+    // Test 5: While loop
+    ProgramNode* p5 = test_while_loop();
+    IrGenerator generator5;
+    std::string out5 = generator5.generate(*p5);
+    EXPECT_SNAPSHOT(runner, out5, "tests/ir_tests/snapshots/while_loop.ssa");
+    delete p5;
 }
 
 int main() {

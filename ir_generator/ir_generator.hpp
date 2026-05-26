@@ -22,13 +22,12 @@ private:
     std::string nameForCurrentExpression;
     std::string typeForCurrentExpression;
     ScopeTable scopeTable;
-
+    
 
 public:
     virtual ~IrGenerator() = default;
-
     std::string generate(ASTNode& node);
-
+    std::string hulkTypeToQbeType(Type* type);
     Type* visit(ProgramNode& node) override;
     Type* visit(BlockNode& node) override;
     Type* visit(FunctionDeclNode& node) override;
@@ -47,4 +46,7 @@ public:
     Type* visit(BoolNode& node) override;
     Type* visit(TypeNode& node) override;
     Type* visit(ReturnNode& node) override;
+    Type* visit(AssignmentNode& node) override;
+    Type* visit(WhileNode& node) override;
+    Type* visit(ForNode& node) override;
 };

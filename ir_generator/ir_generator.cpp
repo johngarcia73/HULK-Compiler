@@ -1,22 +1,16 @@
 #include "ir_generator.hpp"
 #include "../parser/AST_Builder/ast_node.hpp"
-static std::string hulkTypeToQbeType(Type* type) {
-    std::string typeStr="l";
-    if(type){
-       typeStr =type->toString();
-    }
-     
-    if (typeStr == "bool") {
-        return "b";
-    } 
-    return "l";
-}
+
 
 std::string IrGenerator::generate(ASTNode& node) {
     node.accept(*this);  
     return dataBuilder.toString() +
                             "\n\n"+ 
             codeBuilder.toString();
+}
+std::string IrGenerator::hulkTypeToQbeType(Type* type) {
+    
+    return targetInfo.PointerType;
 }
 
 Type* IrGenerator::visit(ProgramNode& node) { 
@@ -427,6 +421,59 @@ Type* IrGenerator::visit(UnaryOpNode& node) {
     }
     return nullptr;
 }
+Type* IrGenerator::visit(AssignmentNode& node) {
+    node.value->accept(*this);
+    std::string valueResult = nameForCurrentExpression;
+    typeForCurrentExpression = hulkTypeToQbeType(node.type);
+    std::string variableRegister = scopeTable.resolveVariable(node.target);
+    codeBuilder.addLine("%{} = {} copy %{}",
+                        variableRegister,
+                        typeForCurrentExpression,
+                        valueResult
+                        );
+    nameForCurrentExpression = variableRegister;
+    return nullptr;
+}
+Type* IrGenerator::visit(WhileNode& node) {
+    std::string conditionLabel = nameGenerator.generateName("loop_cond");
+    std::string bodyLabel = nameGenerator.generateName("loop_body");
+    std::string endLabel = nameGenerator.generateName("loop_end");
+    
+    //loop_cond
+    codeBuilder.addLine("@{}", conditionLabel);
+    codeBuilder.indent();
+    node.condition->accept(*this);
+    codeBuilder.addLine("jnz %{},@{},@{}",
+                        nameForCurrentExpression,
+                        bodyLabel,
+                        endLabel
+                    );
+    codeBuilder.unindent();
+
+    //loop_body
+    codeBuilder.addLine("@{}", bodyLabel);
+    codeBuilder.indent();
+    scopeTable.enterScope();
+    
+    node.body->accept(*this);
+    
+    codeBuilder.addLine("jmp @{}", conditionLabel);
+    scopeTable.exitScope();
+    codeBuilder.unindent();
+
+    //loop_end
+    codeBuilder.addLine("@{}", endLabel);
+    //The result of a while loop the result of the last result of it's body.
+    return nullptr;
+    
+}
+Type* IrGenerator::visit(ForNode& node) {
+    
+    //TODO implement for loop,is missing the iterator
+    //rigth now.
+    return nullptr;
+}
+//TODO agree if posible to delete this types if not visitor use them.
 Type* IrGenerator::visit(TypeNode& node) { return nullptr; }
 Type* IrGenerator::visit(ParamListNode& node) { return nullptr; }
 Type* IrGenerator::visit(LetBindingNode& node) { return nullptr; }

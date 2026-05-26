@@ -9,11 +9,26 @@ function l $add(l %a, l %b) {
 
 export function w $main() {
 @start
-        %n1 = l copy 10
-        %n2 = l copy 20 
-        %a = l call $add(l %n1, l %n2)
-        call $_print(l $hello)
-        call $printf(l $msg,..., l %a)
+        # int sum = 0;
+        # int i = 0;
+        # while (i < 10) {
+        #
+        #   sum+=i;
+        #   i++;
+        #}
+    
+        
+        %sum = l copy 0
+        %i = l copy 0 
+        @cond
+            %cond = l csltl %i, 10
+            jnz %cond,@loop,@end
+        @loop
+           %sum = l add %sum, %i
+           %i = l add %i, 1
+           jmp @cond
+        @end
+            call $printf(l $msg,..., l %sum)
         ret 0
     
 }

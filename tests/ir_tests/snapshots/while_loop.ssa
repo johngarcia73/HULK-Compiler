@@ -1,0 +1,24 @@
+data $msg = align 8 { b "Result is %d \n ", b 0}
+
+
+export function w $main() {
+@start
+    %num_literal1 =l copy 0
+    %_i1 = l copy %num_literal1 
+    @loop_cond1
+        %num_literal2 =l copy 5
+        %less_than1 = l csltl %_i1, %num_literal2
+        jnz %less_than1,@loop_body1,@loop_end1
+    @loop_body1
+        %num_literal3 =l copy 1
+        %addition1 = l add %_i1, %num_literal3
+        %_i1 = l copy %addition1
+        %block_result1 = l copy %_i1
+        jmp @loop_cond1
+    @loop_end1
+    %block_result2 = l copy %block_result1
+    %let_in_result1 = l copy %block_result2
+    call $printf(l $msg,...,l %let_in_result1)
+    call $_hulk_cleanup()
+    ret 0
+}
