@@ -271,6 +271,63 @@ public:
 
 };
 
+class IterableType : public Type {
+    Type* elementType_;
+
+public:
+    explicit IterableType(Type* elementType)
+        : elementType_(elementType ? elementType : ObjectType::instance()) {}
+
+    std::string toString() const override {
+        return elementType_->toString() + "*";
+    }
+
+    bool equals(const Type* other) const override {
+        auto* iterable = dynamic_cast<const IterableType*>(other);
+        return iterable && elementType_->equals(iterable->elementType_);
+    }
+
+    Type* elementType() const { return elementType_; }
+};
+
+class EnumerableType : public Type {
+    Type* elementType_;
+
+public:
+    explicit EnumerableType(Type* elementType)
+        : elementType_(elementType ? elementType : ObjectType::instance()) {}
+
+    std::string toString() const override {
+        return "Enumerable<" + elementType_->toString() + ">";
+    }
+
+    bool equals(const Type* other) const override {
+        auto* enumerable = dynamic_cast<const EnumerableType*>(other);
+        return enumerable && elementType_->equals(enumerable->elementType_);
+    }
+
+    Type* elementType() const { return elementType_; }
+};
+
+class VectorType : public Type {
+    Type* elementType_;
+
+public:
+    explicit VectorType(Type* elementType)
+        : elementType_(elementType ? elementType : ObjectType::instance()) {}
+
+    std::string toString() const override {
+        return elementType_->toString() + "[]";
+    }
+
+    bool equals(const Type* other) const override {
+        auto* vector = dynamic_cast<const VectorType*>(other);
+        return vector && elementType_->equals(vector->elementType_);
+    }
+
+    Type* elementType() const { return elementType_; }
+};
+
 class StringType : public Type {
 public:
     static StringType* instance() {
@@ -312,10 +369,38 @@ private:
     AnyType() = default;
 };
 
+inline const IterableType* asIterableType(const Type* type) {
+    return dynamic_cast<const IterableType*>(type);
+}
+
+inline IterableType* asIterableType(Type* type) {
+    return dynamic_cast<IterableType*>(type);
+}
+
+inline const EnumerableType* asEnumerableType(const Type* type) {
+    return dynamic_cast<const EnumerableType*>(type);
+}
+
+inline EnumerableType* asEnumerableType(Type* type) {
+    return dynamic_cast<EnumerableType*>(type);
+}
+
+inline const VectorType* asVectorType(const Type* type) {
+    return dynamic_cast<const VectorType*>(type);
+}
+
+inline VectorType* asVectorType(Type* type) {
+    return dynamic_cast<VectorType*>(type);
+}
+
 inline bool isObjectLikeType(const Type* type) {
     return dynamic_cast<const ObjectType*>(type) != nullptr ||
            dynamic_cast<const NominalType*>(type) != nullptr ||
            dynamic_cast<const ProtocolType*>(type) != nullptr ||
+           dynamic_cast<const IterableType*>(type) != nullptr ||
+           dynamic_cast<const EnumerableType*>(type) != nullptr ||
+           dynamic_cast<const VectorType*>(type) != nullptr ||
+           dynamic_cast<const FunctionType*>(type) != nullptr ||
            isNumberType(type) ||
            dynamic_cast<const StringType*>(type) != nullptr ||
            dynamic_cast<const BoolType*>(type) != nullptr;
@@ -339,6 +424,27 @@ inline bool typeConforms(const Type* actual, const Type* expected) {
     }
     if (isNumberType(expected) && isNumberType(actual)) {
         return areNumberTypesCompatible(expected, actual);
+    }
+    if (auto* expectedIterable = asIterableType(expected)) {
+        if (auto* actualIterable = asIterableType(actual)) {
+            return typeConforms(actualIterable->elementType(), expectedIterable->elementType());
+        }
+        if (auto* actualVector = asVectorType(actual)) {
+            return typeConforms(actualVector->elementType(), expectedIterable->elementType());
+        }
+    }
+    if (auto* expectedEnumerable = asEnumerableType(expected)) {
+        if (auto* actualEnumerable = asEnumerableType(actual)) {
+            return typeConforms(actualEnumerable->elementType(), expectedEnumerable->elementType());
+        }
+        if (auto* actualVector = asVectorType(actual)) {
+            return typeConforms(actualVector->elementType(), expectedEnumerable->elementType());
+        }
+    }
+    if (auto* expectedVector = asVectorType(expected)) {
+        if (auto* actualVector = asVectorType(actual)) {
+            return typeConforms(actualVector->elementType(), expectedVector->elementType());
+        }
     }
     if (isProtocolType(expected) || isProtocolType(actual)) {
         return actual->equals(expected);
@@ -381,6 +487,16 @@ inline Type* lowestCommonAncestor(Type* left, Type* right) {
     }
     if (isNumberType(left) && isNumberType(right)) {
         return commonNumberType(left, right);
+    }
+    if (auto* leftVector = asVectorType(left)) {
+        if (auto* rightVector = asVectorType(right)) {
+            return new VectorType(lowestCommonAncestor(leftVector->elementType(), rightVector->elementType()));
+        }
+    }
+    if (auto* leftIterable = asIterableType(left)) {
+        if (auto* rightIterable = asIterableType(right)) {
+            return new IterableType(lowestCommonAncestor(leftIterable->elementType(), rightIterable->elementType()));
+        }
     }
     if (isProtocolType(left) || isProtocolType(right)) {
         if (left->equals(right)) {

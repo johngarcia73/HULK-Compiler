@@ -695,6 +695,128 @@ Type* NewNode::accept(Visitor& v) {
 }
 
 // ------------------------------------------------------------
+// LambdaNode
+// ------------------------------------------------------------
+LambdaNode::LambdaNode(
+    std::vector<std::string> p,
+    std::vector<Type*> pt,
+    std::vector<std::string> ptn,
+    Type* rt,
+    std::string rtn,
+    bool explicitReturn,
+    ASTNodePtr b)
+    : params(std::move(p)),
+      paramTypes(std::move(pt)),
+      paramTypeNames(std::move(ptn)),
+      declaredReturnType(rt),
+      declaredReturnTypeName(std::move(rtn)),
+      hasExplicitReturnType(explicitReturn),
+      body(b) {}
+
+LambdaNode::~LambdaNode() {
+    delete body;
+}
+
+void LambdaNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "Lambda";
+    print_metadata(o, *this);
+    o << "\n";
+    print_line(
+        o,
+        indent_n + 2,
+        "Signature: " + function_signature(params, paramTypes, paramTypeNames, declaredReturnType));
+    if (functionType) {
+        print_line(o, indent_n + 2, "InferredFunctionType: " + functionType->toString());
+    }
+    print_line(o, indent_n + 2, body ? "Body:" : "Body: <none>");
+    if (body) body->print(o, indent_n + 4);
+}
+
+Type* LambdaNode::accept(Visitor& v) {
+    return v.visit(*this);
+}
+
+// ------------------------------------------------------------
+// VectorLiteralNode
+// ------------------------------------------------------------
+VectorLiteralNode::VectorLiteralNode(std::vector<ASTNodePtr> e)
+    : elements(std::move(e)) {}
+
+VectorLiteralNode::~VectorLiteralNode() {
+    for (auto* element : elements) delete element;
+}
+
+void VectorLiteralNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "VectorLiteral";
+    print_metadata(o, *this);
+    o << "\n";
+    if (elements.empty()) {
+        print_line(o, indent_n + 2, "Elements: <empty>");
+        return;
+    }
+    print_line(o, indent_n + 2, "Elements:");
+    for (auto* element : elements) element->print(o, indent_n + 4);
+}
+
+Type* VectorLiteralNode::accept(Visitor& v) {
+    return v.visit(*this);
+}
+
+// ------------------------------------------------------------
+// VectorComprehensionNode
+// ------------------------------------------------------------
+VectorComprehensionNode::VectorComprehensionNode(ASTNodePtr expr, std::string it, ASTNodePtr iter)
+    : expression(expr), iterator(std::move(it)), iterable(iter) {}
+
+VectorComprehensionNode::~VectorComprehensionNode() {
+    delete expression;
+    delete iterable;
+}
+
+void VectorComprehensionNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "VectorComprehension(" << iterator << ")";
+    print_metadata(o, *this);
+    o << "\n";
+    print_line(o, indent_n + 2, iterable ? "Iterable:" : "Iterable: <none>");
+    if (iterable) iterable->print(o, indent_n + 4);
+    print_line(o, indent_n + 2, expression ? "Expression:" : "Expression: <none>");
+    if (expression) expression->print(o, indent_n + 4);
+}
+
+Type* VectorComprehensionNode::accept(Visitor& v) {
+    return v.visit(*this);
+}
+
+// ------------------------------------------------------------
+// IndexAccessNode
+// ------------------------------------------------------------
+IndexAccessNode::IndexAccessNode(ASTNodePtr b, ASTNodePtr i)
+    : base(b), index(i) {}
+
+IndexAccessNode::~IndexAccessNode() {
+    delete base;
+    delete index;
+}
+
+void IndexAccessNode::print(std::ostream& o, int indent_n) const {
+    indent(o, indent_n);
+    o << "IndexAccess";
+    print_metadata(o, *this);
+    o << "\n";
+    print_line(o, indent_n + 2, base ? "Base:" : "Base: <none>");
+    if (base) base->print(o, indent_n + 4);
+    print_line(o, indent_n + 2, index ? "Index:" : "Index: <none>");
+    if (index) index->print(o, indent_n + 4);
+}
+
+Type* IndexAccessNode::accept(Visitor& v) {
+    return v.visit(*this);
+}
+
+// ------------------------------------------------------------
 // WhileNode
 // ------------------------------------------------------------
 WhileNode::WhileNode(ASTNodePtr c, ASTNodePtr b)

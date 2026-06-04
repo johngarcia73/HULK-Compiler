@@ -31,6 +31,7 @@ enum class TokenType : int {
     TOKEN_NUMBER,
     TOKEN_STRING,
     TOKEN_ARROW,
+    TOKEN_TYPE_ARROW,
     TOKEN_MODULE,
     TOKEN_NOT,
     TOKEN_AND,
@@ -41,6 +42,8 @@ enum class TokenType : int {
     TOKEN_SLASH,
     TOKEN_LPAREN,
     TOKEN_RPAREN,
+    TOKEN_L_SQUARE_BRACK,
+    TOKEN_R_SQUARE_BRACK,
     TOKEN_L_CURL_BRACK,
     TOKEN_R_CURL_BRACK,
     TOKEN_SEMICOLON,
@@ -123,6 +126,7 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_NOT_EQUAL:    return "NOT_EQUAL";
         case TokenType::TOKEN_EQUAL:        return "EQUAL";
         case TokenType::TOKEN_ARROW:        return "ARROW";
+        case TokenType::TOKEN_TYPE_ARROW:   return "TYPE_ARROW";
         case TokenType::TOKEN_NOT:          return "NOT";
         case TokenType::TOKEN_AND:          return "AND";
         case TokenType::TOKEN_OR:           return "OR";
@@ -132,6 +136,8 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_GREATER_EQUALS: return "GREATER_EQUALS";
         case TokenType::TOKEN_COLON:        return "COLON";
         case TokenType::TOKEN_DOT:          return "DOT";
+        case TokenType::TOKEN_L_SQUARE_BRACK: return "L_SQUARE_BRACK";
+        case TokenType::TOKEN_R_SQUARE_BRACK: return "R_SQUARE_BRACK";
         case TokenType::TOKEN_EOF:          return "$";
         default:                            return "UNKNOWN";
     }
@@ -179,6 +185,8 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_LESS_EQUALS, "<=", false },
         { TokenType::TOKEN_GREATER_EQUALS, ">=", false },
         { TokenType::TOKEN_EQUALITY, "==", false },
+        { TokenType::TOKEN_ARROW,    "=>", false },
+        { TokenType::TOKEN_TYPE_ARROW, "->", false },
         { TokenType::TOKEN_MODULE,     "%", false },
         { TokenType::TOKEN_NOT,      "!", false },
         { TokenType::TOKEN_AND,      "&", false },
@@ -191,9 +199,10 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_LESS_THAN,    "<",   false },
         { TokenType::TOKEN_GREATER_THAN, ">",   false },
         { TokenType::TOKEN_EQUAL,    "=",  false },
-        { TokenType::TOKEN_ARROW,    "=>", false },
         { TokenType::TOKEN_LPAREN,   "\\(", false },
         { TokenType::TOKEN_RPAREN,   "\\)", false },
+        { TokenType::TOKEN_L_SQUARE_BRACK, "\\[", false },
+        { TokenType::TOKEN_R_SQUARE_BRACK, "\\]", false },
         { TokenType::TOKEN_L_CURL_BRACK, "\\{", false },
         { TokenType::TOKEN_R_CURL_BRACK, "\\}", false },
         { TokenType::TOKEN_SEMICOLON, ";", false },

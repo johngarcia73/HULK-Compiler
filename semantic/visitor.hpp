@@ -29,6 +29,10 @@ class LetBindingsNode;
 class UnaryOpNode;
 class TypeNode;
 class ReturnNode;
+class LambdaNode;
+class VectorLiteralNode;
+class VectorComprehensionNode;
+class IndexAccessNode;
 
 
 class Visitor {
@@ -61,4 +65,8 @@ public:
     virtual Type* visit(BoolNode& node) = 0;
     virtual Type* visit(TypeNode& node) = 0;
     virtual Type* visit(ReturnNode& node) = 0;
+    virtual Type* visit(LambdaNode& node) = 0;
+    virtual Type* visit(VectorLiteralNode& node) = 0;
+    virtual Type* visit(VectorComprehensionNode& node) = 0;
+    virtual Type* visit(IndexAccessNode& node) = 0;
 };

@@ -77,6 +77,31 @@ std::vector<ASTNode*> take_arg_items(ASTNode* node) {
     return take_block_items(node);
 }
 
+std::vector<TypeNode*> take_type_items(ASTNode* node) {
+    std::vector<TypeNode*> types;
+    if (!node) {
+        return types;
+    }
+    if (auto* block = dynamic_cast<BlockNode*>(node)) {
+        for (auto* item : block->stmts) {
+            if (auto* type = dynamic_cast<TypeNode*>(item)) {
+                types.push_back(type);
+            } else {
+                delete item;
+            }
+        }
+        block->stmts.clear();
+        delete block;
+        return types;
+    }
+    if (auto* type = dynamic_cast<TypeNode*>(node)) {
+        types.push_back(type);
+        return types;
+    }
+    delete node;
+    return types;
+}
+
 ParamListNode* empty_param_list() {
     return new ParamListNode({}, {}, {});
 }
@@ -181,6 +206,36 @@ FunctionDeclNode* build_protocol_method(
 
 TypeNode* take_type_annotation(ASTNode* node) {
     return dynamic_cast<TypeNode*>(node);
+}
+
+LambdaNode* build_lambda(
+    ParamListNode* paramsNode,
+    TypeNode* returnTypeNode,
+    ASTNode* body,
+    const SourceSpan& span) {
+    std::vector<std::string> params;
+    std::vector<Type*> paramTypes;
+    std::vector<std::string> paramTypeNames;
+    if (paramsNode) {
+        params = std::move(paramsNode->params);
+        paramTypes = std::move(paramsNode->paramTypes);
+        paramTypeNames = std::move(paramsNode->paramTypeNames);
+        delete paramsNode;
+    }
+    Type* returnType = returnTypeNode ? returnTypeNode->type : nullptr;
+    std::string returnTypeName = returnTypeNode ? returnTypeNode->typeName : "";
+    bool hasExplicitReturn = returnTypeNode != nullptr;
+    delete returnTypeNode;
+    return attach_span(
+        new LambdaNode(
+            std::move(params),
+            std::move(paramTypes),
+            std::move(paramTypeNames),
+            returnType,
+            std::move(returnTypeName),
+            hasExplicitReturn,
+            body),
+        span);
 }
 
 bool production_matches(
@@ -477,17 +532,69 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     if (match("opt_type_annotation", {"COLON", "type"})) {
         return pass_with_span(RHS(1), merged_rhs_span(rhs));
     }
-    if (match("type", {"NUMBER_TYPE"})) {
+    if (match("type", {"type_atom"})) {
+        PASS();
+    }
+    if (match("type", {"type", "STAR"})) {
+        auto* element = dynamic_cast<TypeNode*>(RHS(0));
+        Type* elementType = element ? element->type : nullptr;
+        std::string elementName = element ? element->typeName : "";
+        delete element;
+        return attach_span(
+            new TypeNode(elementName + "*", new IterableType(elementType ? elementType : ObjectType::instance())),
+            merged_rhs_span(rhs));
+    }
+    if (match("type", {"type", "L_SQUARE_BRACK", "R_SQUARE_BRACK"})) {
+        auto* element = dynamic_cast<TypeNode*>(RHS(0));
+        Type* elementType = element ? element->type : nullptr;
+        std::string elementName = element ? element->typeName : "";
+        delete element;
+        return attach_span(
+            new TypeNode(elementName + "[]", new VectorType(elementType ? elementType : ObjectType::instance())),
+            merged_rhs_span(rhs));
+    }
+    if (match("type", {"L_PAREN", "type_list_opt", "R_PAREN", "TYPE_ARROW", "type"})) {
+        auto paramNodes = take_type_items(RHS(1));
+        auto* returnTypeNode = dynamic_cast<TypeNode*>(RHS(4));
+        std::vector<Type*> params;
+        std::string name = "(";
+        for (size_t i = 0; i < paramNodes.size(); ++i) {
+            if (i > 0) {
+                name += ", ";
+            }
+            params.push_back(paramNodes[i]->type ? paramNodes[i]->type : ObjectType::instance());
+            name += paramNodes[i]->typeName;
+            delete paramNodes[i];
+        }
+        Type* returnType = returnTypeNode && returnTypeNode->type ? returnTypeNode->type : ObjectType::instance();
+        std::string returnName = returnTypeNode ? returnTypeNode->typeName : "Object";
+        delete returnTypeNode;
+        name += ") -> " + returnName;
+        return attach_span(new TypeNode(name, new FunctionType(params, returnType)), merged_rhs_span(rhs));
+    }
+    if (match("type_atom", {"NUMBER_TYPE"})) {
         return attach_span(new TypeNode("Number", NumberType::instance()), rhs[0].span);
     }
-    if (match("type", {"BOOL_TYPE"})) {
+    if (match("type_atom", {"BOOL_TYPE"})) {
         return attach_span(new TypeNode("Bool", BoolType::instance()), rhs[0].span);
     }
-    if (match("type", {"STRING_TYPE"})) {
+    if (match("type_atom", {"STRING_TYPE"})) {
         return attach_span(new TypeNode("String", StringType::instance()), rhs[0].span);
     }
-    if (match("type", {"IDENTIFIER"})) {
+    if (match("type_atom", {"IDENTIFIER"})) {
         return attach_span(new TypeNode(TOKEN(0), builtin_type_for_name(TOKEN(0))), rhs[0].span);
+    }
+    if (match("type_list_opt", {})) {
+        return attach_span(new BlockNode({}), {});
+    }
+    if (match("type_list_opt", {"type_list"})) {
+        PASS();
+    }
+    if (match("type_list", {"type"})) {
+        BUILD_ARG_LIST(RHS(0));
+    }
+    if (match("type_list", {"type_list", "COMMA", "type"})) {
+        BUILD_BLOCK(RHS(0), RHS(2));
     }
 
     // Statements
@@ -674,6 +781,9 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     if (match("primary", {"global_call"}) ||
         match("primary", {"member_call"}) ||
         match("primary", {"member_access"}) ||
+        match("primary", {"index_access"}) ||
+        match("primary", {"lambda_expr"}) ||
+        match("primary", {"vector_expr"}) ||
         match("primary", {"new_expr"})) {
         PASS();
     }
@@ -700,8 +810,34 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         match("member_call", {"member_access", "DOT", "IDENTIFIER", "L_PAREN", "arg_list_opt", "R_PAREN"})) {
         return attach_span(new FunctionCallNode(TOKEN(2), take_arg_items(RHS(4)), RHS(0)), merged_rhs_span(rhs));
     }
+    if (match("index_access", {"access_base", "L_SQUARE_BRACK", "expr", "R_SQUARE_BRACK"}) ||
+        match("index_access", {"member_access", "L_SQUARE_BRACK", "expr", "R_SQUARE_BRACK"}) ||
+        match("index_access", {"global_call", "L_SQUARE_BRACK", "expr", "R_SQUARE_BRACK"})) {
+        return attach_span(new IndexAccessNode(RHS(0), RHS(2)), merged_rhs_span(rhs));
+    }
     if (match("new_expr", {"NEW", "IDENTIFIER", "L_PAREN", "arg_list_opt", "R_PAREN"})) {
         return attach_span(new NewNode(TOKEN(1), take_arg_items(RHS(3))), merged_rhs_span(rhs));
+    }
+    if (match("lambda_expr", {"L_PAREN", "param_list_opt", "R_PAREN", "ARROW", "expr"})) {
+        return build_lambda(dynamic_cast<ParamListNode*>(RHS(1)), nullptr, RHS(4), merged_rhs_span(rhs));
+    }
+    if (match("lambda_expr", {"L_PAREN", "param_list_opt", "R_PAREN", "COLON", "type", "ARROW", "expr"})) {
+        return build_lambda(dynamic_cast<ParamListNode*>(RHS(1)), dynamic_cast<TypeNode*>(RHS(4)), RHS(6), merged_rhs_span(rhs));
+    }
+    if (match("vector_expr", {"L_SQUARE_BRACK", "R_SQUARE_BRACK"})) {
+        return attach_span(new VectorLiteralNode({}), merged_rhs_span(rhs));
+    }
+    if (match("vector_expr", {"L_SQUARE_BRACK", "vector_items", "R_SQUARE_BRACK"})) {
+        return attach_span(new VectorLiteralNode(take_arg_items(RHS(1))), merged_rhs_span(rhs));
+    }
+    if (match("vector_expr", {"L_SQUARE_BRACK", "additive", "OR", "IDENTIFIER", "IN", "expr", "R_SQUARE_BRACK"})) {
+        return attach_span(new VectorComprehensionNode(RHS(1), TOKEN(3), RHS(5)), merged_rhs_span(rhs));
+    }
+    if (match("vector_items", {"expr"})) {
+        BUILD_ARG_LIST(RHS(0));
+    }
+    if (match("vector_items", {"vector_items", "COMMA", "expr"})) {
+        BUILD_BLOCK(RHS(0), RHS(2));
     }
 
     // Let expressions
@@ -791,6 +927,12 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         BUILD_BLOCK(RHS(0), RHS(2));
     }
 
-    std::cerr << "ASTBuilder: unhandled production " << pid << "\n";
+    const auto& production = grammar->get_productions()[pid];
+    std::cerr << "ASTBuilder: unhandled production " << pid << " ("
+              << grammar->symtab[production.lhs].name << " ->";
+    for (auto symbol : production.rhs) {
+        std::cerr << " " << grammar->symtab[symbol].name;
+    }
+    std::cerr << ")\n";
     return nullptr;
 }

@@ -212,6 +212,55 @@ struct NewNode : ASTNode {
     Type* accept(Visitor& v) override;
 };
 
+struct LambdaNode : ASTNode {
+    std::vector<std::string> params;
+    std::vector<Type*> paramTypes;
+    std::vector<std::string> paramTypeNames;
+    Type* declaredReturnType = nullptr;
+    std::string declaredReturnTypeName;
+    bool hasExplicitReturnType = false;
+    ASTNodePtr body;
+    FunctionType* functionType = nullptr;
+    LambdaNode(
+        std::vector<std::string> p,
+        std::vector<Type*> pt,
+        std::vector<std::string> ptn,
+        Type* rt,
+        std::string rtn,
+        bool explicitReturn,
+        ASTNodePtr b);
+    ~LambdaNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
+struct VectorLiteralNode : ASTNode {
+    std::vector<ASTNodePtr> elements;
+    explicit VectorLiteralNode(std::vector<ASTNodePtr> e);
+    ~VectorLiteralNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
+struct VectorComprehensionNode : ASTNode {
+    ASTNodePtr expression;
+    std::string iterator;
+    ASTNodePtr iterable;
+    VectorComprehensionNode(ASTNodePtr expr, std::string it, ASTNodePtr iter);
+    ~VectorComprehensionNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
+struct IndexAccessNode : ASTNode {
+    ASTNodePtr base;
+    ASTNodePtr index;
+    IndexAccessNode(ASTNodePtr b, ASTNodePtr i);
+    ~IndexAccessNode();
+    void print(std::ostream& o, int indent_n = 0) const override;
+    Type* accept(Visitor& v) override;
+};
+
 struct WhileNode : ASTNode {
     ASTNodePtr condition;
     ASTNodePtr body;

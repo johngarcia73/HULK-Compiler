@@ -1,5 +1,6 @@
 %token FUNCTION TYPE PROTOCOL INHERITS EXTENDS NEW IS AS
 %token L_PAREN R_PAREN
+%token L_SQUARE_BRACK R_SQUARE_BRACK
 %token L_CURL_BRACK R_CURL_BRACK
 %token SEMICOLON
 %token COMMA
@@ -22,6 +23,7 @@
 %token COLON
 %token DOT
 %token ARROW "=>"
+%token TYPE_ARROW "->"
 %token RETURN
 
 %start program
@@ -101,10 +103,21 @@ param_decl : IDENTIFIER opt_type_annotation
 opt_type_annotation : /* empty */
                     | COLON type
 
-type : NUMBER_TYPE
-     | BOOL_TYPE
-     | STRING_TYPE
-     | IDENTIFIER
+type : type_atom
+     | type STAR
+     | type L_SQUARE_BRACK R_SQUARE_BRACK
+     | L_PAREN type_list_opt R_PAREN TYPE_ARROW type
+
+type_atom : NUMBER_TYPE
+          | BOOL_TYPE
+          | STRING_TYPE
+          | IDENTIFIER
+
+type_list_opt : /* empty */
+              | type_list
+
+type_list : type
+          | type_list COMMA type
 
 statement : assignment SEMICOLON
           | let_expr SEMICOLON
@@ -201,9 +214,12 @@ primary : NUMBER
         | TRUE
         | FALSE
         | IDENTIFIER
+        | lambda_expr
+        | vector_expr
         | global_call
         | member_call
         | member_access
+        | index_access
         | new_expr
         | L_PAREN expr R_PAREN
 
@@ -219,7 +235,21 @@ access_base : IDENTIFIER
 member_call : access_base DOT IDENTIFIER L_PAREN arg_list_opt R_PAREN
             | member_access DOT IDENTIFIER L_PAREN arg_list_opt R_PAREN
 
+index_access : access_base L_SQUARE_BRACK expr R_SQUARE_BRACK
+             | member_access L_SQUARE_BRACK expr R_SQUARE_BRACK
+             | global_call L_SQUARE_BRACK expr R_SQUARE_BRACK
+
 new_expr : NEW IDENTIFIER L_PAREN arg_list_opt R_PAREN
+
+lambda_expr : L_PAREN param_list_opt R_PAREN ARROW expr
+            | L_PAREN param_list_opt R_PAREN COLON type ARROW expr
+
+vector_expr : L_SQUARE_BRACK R_SQUARE_BRACK
+            | L_SQUARE_BRACK vector_items R_SQUARE_BRACK
+            | L_SQUARE_BRACK additive OR IDENTIFIER IN expr R_SQUARE_BRACK
+
+vector_items : expr
+             | vector_items COMMA expr
 
 let_expr : LET let_bindings IN loop_expr_body
 

@@ -13,6 +13,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 static std::string resolve_path(std::initializer_list<const char*> candidates) {
     for (const char* candidate : candidates) {
@@ -52,6 +53,125 @@ static void print_annotated_ast(ProgramNode* program) {
     }
     print_section("Annotated AST");
     program->print(std::cout);
+    std::cout << std::endl;
+}
+
+static bool is_focused_call(const FunctionCallNode* call) {
+    if (!call) {
+        return false;
+    }
+    return call->name == "range"
+        || call->name == "sum"
+        || call->name == "mean"
+        || call->name == "count_when"
+        || call->name == "filter"
+        || call->name == "invoke"
+        || call->name == "size"
+        || call->name == "iter"
+        || call->name == "next"
+        || call->name == "current";
+}
+
+static bool is_focused_ast_node(const ASTNode* node) {
+    return dynamic_cast<const ForNode*>(node)
+        || dynamic_cast<const VectorLiteralNode*>(node)
+        || dynamic_cast<const VectorComprehensionNode*>(node)
+        || dynamic_cast<const IndexAccessNode*>(node)
+        || dynamic_cast<const LambdaNode*>(node)
+        || is_focused_call(dynamic_cast<const FunctionCallNode*>(node));
+}
+
+static void collect_focused_ast_nodes(ASTNode* node, std::vector<ASTNode*>& focused) {
+    if (!node) {
+        return;
+    }
+
+    if (is_focused_ast_node(node)) {
+        focused.push_back(node);
+    }
+
+    if (auto* program = dynamic_cast<ProgramNode*>(node)) {
+        for (auto* decl : program->decls) collect_focused_ast_nodes(decl, focused);
+        for (auto* stmt : program->stmts) collect_focused_ast_nodes(stmt, focused);
+    } else if (auto* function = dynamic_cast<FunctionDeclNode*>(node)) {
+        collect_focused_ast_nodes(function->body, focused);
+        collect_focused_ast_nodes(function->exprBody, focused);
+    } else if (auto* exprStmt = dynamic_cast<ExprStmtNode*>(node)) {
+        collect_focused_ast_nodes(exprStmt->expr, focused);
+    } else if (auto* block = dynamic_cast<BlockNode*>(node)) {
+        for (auto* stmt : block->stmts) collect_focused_ast_nodes(stmt, focused);
+    } else if (auto* binary = dynamic_cast<BinaryOpNode*>(node)) {
+        collect_focused_ast_nodes(binary->left, focused);
+        collect_focused_ast_nodes(binary->right, focused);
+    } else if (auto* unary = dynamic_cast<UnaryOpNode*>(node)) {
+        collect_focused_ast_nodes(unary->operand, focused);
+    } else if (auto* let = dynamic_cast<LetNode*>(node)) {
+        collect_focused_ast_nodes(let->init, focused);
+        collect_focused_ast_nodes(let->body, focused);
+    } else if (auto* conditional = dynamic_cast<IfNode*>(node)) {
+        collect_focused_ast_nodes(conditional->condition, focused);
+        collect_focused_ast_nodes(conditional->then_branch, focused);
+        collect_focused_ast_nodes(conditional->else_branch, focused);
+    } else if (auto* call = dynamic_cast<FunctionCallNode*>(node)) {
+        collect_focused_ast_nodes(call->receiver, focused);
+        for (auto* arg : call->args) collect_focused_ast_nodes(arg, focused);
+    } else if (auto* assignment = dynamic_cast<AssignmentNode*>(node)) {
+        collect_focused_ast_nodes(assignment->target, focused);
+        collect_focused_ast_nodes(assignment->value, focused);
+    } else if (auto* member = dynamic_cast<MemberAccessNode*>(node)) {
+        collect_focused_ast_nodes(member->base, focused);
+    } else if (auto* newExpr = dynamic_cast<NewNode*>(node)) {
+        for (auto* arg : newExpr->args) collect_focused_ast_nodes(arg, focused);
+    } else if (auto* lambda = dynamic_cast<LambdaNode*>(node)) {
+        collect_focused_ast_nodes(lambda->body, focused);
+    } else if (auto* vector = dynamic_cast<VectorLiteralNode*>(node)) {
+        for (auto* element : vector->elements) collect_focused_ast_nodes(element, focused);
+    } else if (auto* comprehension = dynamic_cast<VectorComprehensionNode*>(node)) {
+        collect_focused_ast_nodes(comprehension->iterable, focused);
+        collect_focused_ast_nodes(comprehension->expression, focused);
+    } else if (auto* index = dynamic_cast<IndexAccessNode*>(node)) {
+        collect_focused_ast_nodes(index->base, focused);
+        collect_focused_ast_nodes(index->index, focused);
+    } else if (auto* loop = dynamic_cast<WhileNode*>(node)) {
+        collect_focused_ast_nodes(loop->condition, focused);
+        collect_focused_ast_nodes(loop->body, focused);
+    } else if (auto* loop = dynamic_cast<ForNode*>(node)) {
+        collect_focused_ast_nodes(loop->iterable, focused);
+        collect_focused_ast_nodes(loop->body, focused);
+    } else if (auto* attr = dynamic_cast<AttributeDeclNode*>(node)) {
+        collect_focused_ast_nodes(attr->init, focused);
+    } else if (auto* typeDecl = dynamic_cast<TypeDeclNode*>(node)) {
+        for (auto* arg : typeDecl->parentArgs) collect_focused_ast_nodes(arg, focused);
+        for (auto* member : typeDecl->members) collect_focused_ast_nodes(member, focused);
+    } else if (auto* protocol = dynamic_cast<ProtocolDeclNode*>(node)) {
+        for (auto* method : protocol->methods) collect_focused_ast_nodes(method, focused);
+    } else if (auto* ret = dynamic_cast<ReturnNode*>(node)) {
+        collect_focused_ast_nodes(ret->expr, focused);
+    } else if (auto* bindings = dynamic_cast<LetBindingsNode*>(node)) {
+        for (auto* binding : bindings->bindings) collect_focused_ast_nodes(binding, focused);
+    } else if (auto* binding = dynamic_cast<LetBindingNode*>(node)) {
+        collect_focused_ast_nodes(binding->init, focused);
+    }
+}
+
+static void print_focused_annotated_ast(ProgramNode* program) {
+    if (!program) {
+        return;
+    }
+
+    std::vector<ASTNode*> focused;
+    collect_focused_ast_nodes(program, focused);
+
+    print_section("Focused Annotated AST Nodes");
+    if (focused.empty()) {
+        std::cout << "<no focused nodes found>" << std::endl;
+        return;
+    }
+
+    for (size_t i = 0; i < focused.size(); ++i) {
+        std::cout << "\n--- Focused Node " << (i + 1) << " ---\n";
+        focused[i]->print(std::cout, 2);
+    }
     std::cout << std::endl;
 }
 
@@ -224,12 +344,14 @@ int main(int argc, char** argv) {
         }
         if (!semantic_result.success()) {
             if (options.dump_ast) {
-                print_annotated_ast(program);
+                print_focused_annotated_ast(program);
             }
             return 1;
         }
         print_success("Semantic analysis successful.");
-        print_annotated_ast(program);
+        if (options.dump_ast) {
+            print_focused_annotated_ast(program);
+        }
 
         /*
         // LLVM IR Generation
