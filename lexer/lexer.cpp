@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <regex>
+#include <utility>
 
 Lexer::Lexer(const std::vector<TokenSpec>& specs) {
 
@@ -20,6 +21,21 @@ Lexer::Lexer(const std::vector<TokenSpec>& specs) {
     skip_table = build_skip_table_from_specs(specs);
     built = true;
 }
+
+Lexer::Lexer(DFA cached_dfa, std::vector<bool> cached_skip_table)
+    : dfa(std::move(cached_dfa)),
+      built(true),
+      skip_table(std::move(cached_skip_table)) {
+}
+
+const DFA& Lexer::get_dfa() const {
+    return dfa;
+}
+
+const std::vector<bool>& Lexer::get_skip_table() const {
+    return skip_table;
+}
+
 std::vector<Token> Lexer::tokenize(const std::string& input) {
     if (!built)
         throw std::runtime_error("Lexer not built");

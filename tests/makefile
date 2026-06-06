@@ -20,6 +20,7 @@ SRCS = \
     ../semantic/analyzer.cpp \
     ../semantic/type_inference_visitor.cpp \
     ../semantic/dependency_graph.cpp \
+    frontend_cache.cpp \
     pipeline_test.cpp
 
 OBJS = $(SRCS:.cpp=.o)

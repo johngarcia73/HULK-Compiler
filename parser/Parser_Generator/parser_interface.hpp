@@ -44,6 +44,13 @@ public:
         const Grammar& grammar,
         uint32_t dollar_symbol
     );
+
+    static LALRParser from_tables(
+        const Grammar& grammar,
+        uint32_t dollar_symbol,
+        const ParseTables& tables,
+        const std::vector<Conflict>& conflicts
+    );
     
     // Copy/Move semantics
     LALRParser(const LALRParser& other);
@@ -65,6 +72,7 @@ public:
     
     // Conflict information
     const std::vector<Conflict>& conflicts() const;
+    const ParseTables& parse_tables() const;
     
     // Grammar access
     const Grammar& grammar() const;
@@ -73,6 +81,11 @@ public:
 private:
     // Private constructor (use from_grammar factory)
     LALRParser(const Grammar& grammar, uint32_t dollar_symbol);
+    LALRParser(
+        const Grammar& grammar,
+        uint32_t dollar_symbol,
+        const ParseTables& tables,
+        const std::vector<Conflict>& conflicts);
     
     // Parser state
     const Grammar* _grammar;
@@ -106,4 +119,3 @@ public:
     explicit GrammarException(const std::string& msg)
         : std::runtime_error(msg) {}
 };
-

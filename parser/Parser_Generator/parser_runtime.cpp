@@ -13,10 +13,31 @@ LALRParser LALRParser::from_grammar(
     return LALRParser(grammar, dollar_symbol);
 }
 
+LALRParser LALRParser::from_tables(
+    const Grammar& grammar,
+    uint32_t dollar_symbol,
+    const ParseTables& tables,
+    const std::vector<Conflict>& conflicts)
+{
+    return LALRParser(grammar, dollar_symbol, tables, conflicts);
+}
+
 LALRParser::LALRParser(const Grammar& grammar, uint32_t dollar_symbol)
     : _grammar(&grammar), _dollar_symbol(dollar_symbol)
 {
     _tables = LALRBuilder::build(grammar, dollar_symbol, _conflicts);
+}
+
+LALRParser::LALRParser(
+    const Grammar& grammar,
+    uint32_t dollar_symbol,
+    const ParseTables& tables,
+    const std::vector<Conflict>& conflicts)
+    : _grammar(&grammar),
+      _dollar_symbol(dollar_symbol),
+      _tables(tables),
+      _conflicts(conflicts)
+{
 }
 
 LALRParser::LALRParser(const LALRParser& other)
@@ -60,6 +81,7 @@ size_t LALRParser::conflict_count() const { return _conflicts.size(); }
 bool LALRParser::has_conflicts() const { return !_conflicts.empty(); }
 
 const std::vector<Conflict>& LALRParser::conflicts() const { return _conflicts; }
+const ParseTables& LALRParser::parse_tables() const { return _tables; }
 
 const Grammar& LALRParser::grammar() const { return *_grammar; }
 

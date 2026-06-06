@@ -7,6 +7,7 @@
 #include "../parser/Parser_Generator/genparser.hpp"
 #include "../lexer/lexer.hpp"
 #include "../semantic/analyzer.hpp"
+#include "frontend_cache.hpp"
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -33,6 +34,8 @@ struct RunnerOptions {
     bool dump_symbols = false;
     bool dump_deps = false;
     bool dump_tokens = true;
+    bool force_frontend_rebuild = false;
+    std::string frontend_cache_dir = ".hulk_cache";
 };
 
 static void print_section(const std::string& title) {
@@ -204,6 +207,10 @@ static void print_usage(const char* argv0) {
         << "  --dump-symbols      Dump the semantic symbol table\n"
         << "  --dump-deps         Dump the semantic dependency graph\n"
         << "  --dump-tokens       Ensure token stream dump is enabled\n"
+        << "  --force-frontend-rebuild\n"
+        << "                       Rebuild cached lexer DFA and parser tables\n"
+        << "  --frontend-cache-dir <dir>\n"
+        << "                       Cache directory for lexer/parser artifacts\n"
         << "  --help              Show this help message\n";
 }
 
@@ -224,6 +231,14 @@ static bool parse_args(int argc, char** argv, RunnerOptions& options) {
             options.dump_deps = true;
         } else if (arg == "--dump-tokens") {
             options.dump_tokens = true;
+        } else if (arg == "--force-frontend-rebuild") {
+            options.force_frontend_rebuild = true;
+        } else if (arg == "--frontend-cache-dir") {
+            if (i + 1 >= argc) {
+                std::cerr << "Missing value for --frontend-cache-dir\n";
+                return false;
+            }
+            options.frontend_cache_dir = argv[++i];
         } else if (arg == "--help") {
             print_usage(argv[0]);
             std::exit(0);
@@ -254,19 +269,19 @@ int main(int argc, char** argv) {
             }
         };
 
-        print_stage("Loading grammar.");
-        trace_pipeline("Loading grammar and building parser.");
-        Grammar grammar = build_grammar_from_file(
-            resolve_path({"../parser/Parser_Generator/grammar.y", "parser/Parser_Generator/grammar.y"}));
-        print_success("Grammar loaded.");
-
-        std::unordered_map<std::string, uint32_t> name_to_id;
-        for (size_t i = 0; i < grammar.symtab.size(); ++i)
-            name_to_id[grammar.symtab[i].name] = i;
+        FrontendCacheOptions cache_options;
+        cache_options.cache_dir = options.frontend_cache_dir;
+        cache_options.force_rebuild = options.force_frontend_rebuild;
+        cache_options.trace = options.trace_pipeline;
 
         print_stage("Building parser.");
-        uint32_t eof_id = name_to_id["$"];
-        LALRParser parser = LALRParser::from_grammar(grammar, eof_id);
+        trace_pipeline("Loading grammar and parser tables.");
+        CachedParserBundle parser_bundle = load_cached_parser(
+            resolve_path({"../parser/Parser_Generator/grammar.y", "parser/Parser_Generator/grammar.y"}),
+            cache_options);
+        Grammar& grammar = *parser_bundle.grammar;
+        auto& name_to_id = parser_bundle.name_to_id;
+        LALRParser& parser = *parser_bundle.parser;
         parser.set_builder(std::make_unique<ASTBuilder>(&grammar));
         print_success("Parser ready.");
 
@@ -284,8 +299,11 @@ int main(int argc, char** argv) {
         print_program_source(input);
 
         print_stage("Building lexer.");
-        trace_pipeline("Building lexer.");
-        Lexer lexer(default_token_specs());
+        trace_pipeline("Loading lexer DFA.");
+        Lexer lexer = load_cached_lexer(
+            default_token_specs(),
+            resolve_path({"../lexer/tokens.hpp", "lexer/tokens.hpp"}),
+            cache_options);
         print_success("Lexer ready.");
 
         print_stage("Tokenizing input.");
