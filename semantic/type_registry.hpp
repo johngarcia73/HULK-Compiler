@@ -190,6 +190,15 @@ class NominalTypeRegistry {
         const ProtocolType* expected,
         std::unordered_set<std::string>& seen) const {
         auto expectedMethods = allProtocolMethods(expected);
+        if (auto* function = dynamic_cast<const FunctionType*>(actual)) {
+            if (expectedMethods.size() != 1) {
+                return false;
+            }
+            auto invokeIt = expectedMethods.find("invoke");
+            return invokeIt != expectedMethods.end() &&
+                   invokeIt->second &&
+                   methodSatisfiesRequirement(function, invokeIt->second->type, seen);
+        }
         for (const auto& [name, requiredMethod] : expectedMethods) {
             const RegisteredMethod* implementationMethod =
                 lookupMemberMethod(const_cast<Type*>(actual), name);
@@ -231,6 +240,44 @@ class NominalTypeRegistry {
         }
         if (isNumberType(expected) && isNumberType(actual)) {
             return areNumberTypesCompatible(expected, actual);
+        }
+        if (auto* expectedIterable = asIterableType(expected)) {
+            if (auto* actualIterable = asIterableType(actual)) {
+                return conformsImpl(actualIterable->elementType(), expectedIterable->elementType(), seen);
+            }
+            if (auto* actualVector = asVectorType(actual)) {
+                return conformsImpl(actualVector->elementType(), expectedIterable->elementType(), seen);
+            }
+        }
+        if (auto* expectedEnumerable = asEnumerableType(expected)) {
+            if (auto* actualEnumerable = asEnumerableType(actual)) {
+                return conformsImpl(actualEnumerable->elementType(), expectedEnumerable->elementType(), seen);
+            }
+            if (auto* actualVector = asVectorType(actual)) {
+                return conformsImpl(actualVector->elementType(), expectedEnumerable->elementType(), seen);
+            }
+        }
+        if (auto* expectedVector = asVectorType(expected)) {
+            if (auto* actualVector = asVectorType(actual)) {
+                return conformsImpl(actualVector->elementType(), expectedVector->elementType(), seen);
+            }
+        }
+        if (auto* expectedFunction = dynamic_cast<const FunctionType*>(expected)) {
+            auto* actualFunction = dynamic_cast<const FunctionType*>(actual);
+            if (!actualFunction) {
+                return false;
+            }
+            const auto& expectedParams = expectedFunction->getParamTypes();
+            const auto& actualParams = actualFunction->getParamTypes();
+            if (expectedParams.size() != actualParams.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < expectedParams.size(); ++i) {
+                if (!conformsImpl(expectedParams[i], actualParams[i], seen)) {
+                    return false;
+                }
+            }
+            return conformsImpl(actualFunction->getReturnType(), expectedFunction->getReturnType(), seen);
         }
         if (dynamic_cast<const StringType*>(expected) || dynamic_cast<const BoolType*>(expected)) {
             return actual->equals(expected);
@@ -779,6 +826,16 @@ public:
         }
         if (isNumberType(left) && isNumberType(right)) {
             return commonNumberType(left, right);
+        }
+        if (auto* leftVector = asVectorType(left)) {
+            if (auto* rightVector = asVectorType(right)) {
+                return new VectorType(lowestCommonAncestor(leftVector->elementType(), rightVector->elementType()));
+            }
+        }
+        if (auto* leftIterable = asIterableType(left)) {
+            if (auto* rightIterable = asIterableType(right)) {
+                return new IterableType(lowestCommonAncestor(leftIterable->elementType(), rightIterable->elementType()));
+            }
         }
         if (conforms(left, right)) {
             return right;

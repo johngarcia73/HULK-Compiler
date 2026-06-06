@@ -61,6 +61,12 @@ Type* TypeInferenceVisitor::resolveDeclaredType(
     if (typeName.empty()) {
         return nullptr;
     }
+    if (typeName == "Iterable") {
+        return new IterableType(ObjectType::instance());
+    }
+    if (typeName == "Enumerable") {
+        return new EnumerableType(ObjectType::instance());
+    }
 
     Type* resolved = typeRegistry.resolveTypeName(typeName);
     if (!resolved) {
@@ -121,6 +127,22 @@ void TypeInferenceVisitor::refineUnknownExpression(ASTNode* node, Type* inferred
             traceInference(
                 "Refined '" + variable->name + "' to " + candidate->toString() +
                 " from contextual use at " + safeSpanName(node->span));
+        }
+    }
+    if (auto* lambda = dynamic_cast<LambdaNode*>(node)) {
+        auto* expectedFunction = dynamic_cast<FunctionType*>(inferredType);
+        if (!expectedFunction) {
+            return;
+        }
+        const auto& expectedParams = expectedFunction->getParamTypes();
+        for (size_t i = 0; i < lambda->paramTypes.size() && i < expectedParams.size(); ++i) {
+            if (!lambda->paramTypes[i] || lambda->paramTypes[i]->equals(UnknownType::instance())) {
+                lambda->paramTypes[i] = expectedParams[i];
+            }
+        }
+        if (!lambda->declaredReturnType ||
+            lambda->declaredReturnType->equals(UnknownType::instance())) {
+            lambda->declaredReturnType = expectedFunction->getReturnType();
         }
     }
 }
@@ -215,6 +237,44 @@ void TypeInferenceVisitor::captureCtorParameterTypes(
     }
 }
 
+Type* TypeInferenceVisitor::inferIterableElementType(Type* sourceType, const ASTNode& node) {
+    sourceType = coerceUnknown(sourceType);
+    if (auto* iterable = asIterableType(sourceType)) {
+        return coerceUnknown(iterable->elementType());
+    }
+    if (auto* vector = asVectorType(sourceType)) {
+        return coerceUnknown(vector->elementType());
+    }
+    if (auto* enumerable = asEnumerableType(sourceType)) {
+        return coerceUnknown(enumerable->elementType());
+    }
+
+    if (const RegisteredMethod* currentMethodInfo = typeRegistry.findMethod(sourceType, "current")) {
+        if (const RegisteredMethod* nextMethodInfo = typeRegistry.findMethod(sourceType, "next")) {
+            if (nextMethodInfo->type &&
+                nextMethodInfo->type->getParamTypes().empty() &&
+                typeRegistry.conforms(nextMethodInfo->type->getReturnType(), BoolType::instance())) {
+                return coerceUnknown(currentMethodInfo->type ? currentMethodInfo->type->getReturnType() : UnknownType::instance());
+            }
+        }
+    }
+
+    if (const RegisteredMethod* iterMethodInfo = typeRegistry.findMethod(sourceType, "iter")) {
+        if (iterMethodInfo->type && iterMethodInfo->type->getParamTypes().empty()) {
+            return inferIterableElementType(iterMethodInfo->type->getReturnType(), node);
+        }
+    }
+
+    if (!sourceType->equals(UnknownType::instance()) && !sourceType->equals(VoidType::instance())) {
+        error(
+            SemanticPhase::Inference,
+            node,
+            "Expression used in 'for' is not iterable.",
+            {"Iterable expression type: " + sourceType->toString()});
+    }
+    return UnknownType::instance();
+}
+
 Type* TypeInferenceVisitor::inferAssignmentTargetType(AssignmentNode& node, bool* isSelfTarget) {
     if (isSelfTarget) {
         *isSelfTarget = false;
@@ -229,12 +289,14 @@ Type* TypeInferenceVisitor::inferAssignmentTargetType(AssignmentNode& node, bool
                 "Cannot assign to undeclared symbol '" + variable->name + "'.");
             return UnknownType::instance();
         }
+        Type* symbolType = coerceUnknown(symbol->type);
         if (symbol->kind == SemanticSymbolKind::Function) {
             error(
                 SemanticPhase::Inference,
                 node,
                 "Cannot assign to function '" + variable->name + "'.");
-            return coerceUnknown(symbol->type);
+            variable->type = symbolType;
+            return symbolType;
         }
         if (symbol->kind == SemanticSymbolKind::Self) {
             if (isSelfTarget) {
@@ -244,9 +306,11 @@ Type* TypeInferenceVisitor::inferAssignmentTargetType(AssignmentNode& node, bool
                 SemanticPhase::Inference,
                 node,
                 "'self' is not a valid assignment target.");
-            return coerceUnknown(symbol->type);
+            variable->type = symbolType;
+            return symbolType;
         }
-        return coerceUnknown(symbol->type);
+        variable->type = symbolType;
+        return symbolType;
     }
 
     if (auto* member = dynamic_cast<MemberAccessNode*>(node.target)) {
@@ -266,7 +330,9 @@ Type* TypeInferenceVisitor::inferAssignmentTargetType(AssignmentNode& node, bool
                 node,
                 "Attribute '" + member->member + "' is private to type '" + attribute->ownerTypeName + "'.");
         }
-        return coerceUnknown(attribute->type);
+        Type* attributeType = coerceUnknown(attribute->type);
+        member->type = attributeType;
+        return attributeType;
     }
 
     error(
@@ -724,6 +790,72 @@ Type* TypeInferenceVisitor::visit(FunctionCallNode& node) {
 
     if (node.receiver) {
         Type* receiverType = coerceUnknown(node.receiver->accept(*this));
+        if (auto* vectorType = asVectorType(receiverType)) {
+            if (node.name == "size") {
+                auto* sizeType = new FunctionType({}, NumberType::instance());
+                node.resolvedFunctionType = sizeType;
+                node.overloadStatus = "resolved";
+                node.overloadNotes = {"Selected builtin vector method: size : " + sizeType->toString()};
+                validate_function_like(sizeType, "Vector.size");
+                node.type = NumberType::instance();
+                return node.type;
+            }
+            if (node.name == "current") {
+                auto* currentType = new FunctionType({}, vectorType->elementType());
+                node.resolvedFunctionType = currentType;
+                node.overloadStatus = "resolved";
+                node.overloadNotes = {"Selected builtin vector method: current : " + currentType->toString()};
+                validate_function_like(currentType, "Vector.current");
+                node.type = coerceUnknown(vectorType->elementType());
+                return node.type;
+            }
+            if (node.name == "next") {
+                auto* nextType = new FunctionType({}, BoolType::instance());
+                node.resolvedFunctionType = nextType;
+                node.overloadStatus = "resolved";
+                node.overloadNotes = {"Selected builtin vector method: next : " + nextType->toString()};
+                validate_function_like(nextType, "Vector.next");
+                node.type = BoolType::instance();
+                return node.type;
+            }
+            if (node.name == "iter") {
+                auto* iterType = new FunctionType({}, new IterableType(vectorType->elementType()));
+                node.resolvedFunctionType = iterType;
+                node.overloadStatus = "resolved";
+                node.overloadNotes = {"Selected builtin vector method: iter : " + iterType->toString()};
+                validate_function_like(iterType, "Vector.iter");
+                node.type = iterType->getReturnType();
+                return node.type;
+            }
+        }
+        if (auto* iterableType = asIterableType(receiverType)) {
+            if (node.name == "current") {
+                auto* currentType = new FunctionType({}, iterableType->elementType());
+                node.resolvedFunctionType = currentType;
+                node.overloadStatus = "resolved";
+                validate_function_like(currentType, "Iterable.current");
+                node.type = coerceUnknown(iterableType->elementType());
+                return node.type;
+            }
+            if (node.name == "next") {
+                auto* nextType = new FunctionType({}, BoolType::instance());
+                node.resolvedFunctionType = nextType;
+                node.overloadStatus = "resolved";
+                validate_function_like(nextType, "Iterable.next");
+                node.type = BoolType::instance();
+                return node.type;
+            }
+        }
+        if (auto* enumerableType = asEnumerableType(receiverType)) {
+            if (node.name == "iter") {
+                auto* iterType = new FunctionType({}, new IterableType(enumerableType->elementType()));
+                node.resolvedFunctionType = iterType;
+                node.overloadStatus = "resolved";
+                validate_function_like(iterType, "Enumerable.iter");
+                node.type = iterType->getReturnType();
+                return node.type;
+            }
+        }
         const RegisteredMethod* method = typeRegistry.findMethod(receiverType, node.name);
         if (!method) {
             error(
@@ -796,6 +928,35 @@ Type* TypeInferenceVisitor::visit(FunctionCallNode& node) {
             "Resolved '" + node.name + "' to " + resolution.selected->toString() +
             " at " + safeSpanName(node.span));
         return node.type;
+    }
+
+    SymbolInfo* callableSymbol = symTable.lookup(node.name);
+    if (callableSymbol && callableSymbol->kind != SemanticSymbolKind::Function && callableSymbol->type) {
+        if (auto* functionType = dynamic_cast<FunctionType*>(callableSymbol->type)) {
+            for (size_t i = 0; i < functionType->getParamTypes().size() && i < node.args.size(); ++i) {
+                refineUnknownExpression(node.args[i], functionType->getParamTypes()[i]);
+                argumentTypes[i] = node.args[i] ? coerceUnknown(node.args[i]->accept(*this)) : UnknownType::instance();
+            }
+            validate_function_like(functionType, node.name);
+            node.resolvedFunctionType = functionType;
+            node.overloadStatus = "resolved";
+            node.overloadNotes = {"Selected functor value: " + functionType->toString()};
+            node.type = coerceUnknown(functionType->getReturnType());
+            return node.type;
+        }
+        if (const RegisteredMethod* invokeMethod = typeRegistry.findMethod(callableSymbol->type, "invoke")) {
+            const auto& params = invokeMethod->type->getParamTypes();
+            for (size_t i = 0; i < params.size() && i < node.args.size(); ++i) {
+                refineUnknownExpression(node.args[i], params[i]);
+                argumentTypes[i] = node.args[i] ? coerceUnknown(node.args[i]->accept(*this)) : UnknownType::instance();
+            }
+            validate_function_like(invokeMethod->type, node.name + ".invoke");
+            node.resolvedFunctionType = invokeMethod->type;
+            node.overloadStatus = "resolved";
+            node.overloadNotes = {"Selected invoke method: " + invokeMethod->type->toString()};
+            node.type = coerceUnknown(invokeMethod->type->getReturnType());
+            return node.type;
+        }
     }
 
     context.traceOverload(
@@ -1300,17 +1461,7 @@ Type* TypeInferenceVisitor::visit(ForNode& node) {
             "For loop iterable cannot be Void.");
     }
 
-    Type* iteratorType = UnknownType::instance();
-    if (auto* call = dynamic_cast<FunctionCallNode*>(node.iterable)) {
-        if (call->name == "range") {
-            iteratorType = NumberType::instance();
-        }
-    }
-    if (iteratorType->equals(UnknownType::instance())) {
-        if (const RegisteredMethod* currentMethodInfo = typeRegistry.findMethod(iterableType, "current")) {
-            iteratorType = currentMethodInfo->type ? currentMethodInfo->type->getReturnType() : UnknownType::instance();
-        }
-    }
+    Type* iteratorType = inferIterableElementType(iterableType, node.iterable ? *node.iterable : node);
 
     symTable.enterScope();
     if (!symTable.insert(
@@ -1577,6 +1728,157 @@ Type* TypeInferenceVisitor::visit(ProtocolDeclNode& node) {
             context);
     }
 
+    return node.type;
+}
+
+Type* TypeInferenceVisitor::visit(LambdaNode& node) {
+    if (collecting) {
+        if (collectingDependencies && node.body) {
+            node.body->accept(*this);
+        }
+        return nullptr;
+    }
+
+    if (node.paramTypes.size() < node.params.size()) {
+        node.paramTypes.resize(node.params.size(), UnknownType::instance());
+    }
+    if (node.paramTypeNames.size() < node.params.size()) {
+        node.paramTypeNames.resize(node.params.size());
+    }
+    for (size_t i = 0; i < node.params.size(); ++i) {
+        node.paramTypes[i] = resolveDeclaredType(node.paramTypes[i], node.paramTypeNames[i], node);
+        if (!node.paramTypes[i]) {
+            node.paramTypes[i] = UnknownType::instance();
+        }
+    }
+    node.declaredReturnType = resolveDeclaredType(
+        node.declaredReturnType,
+        node.declaredReturnTypeName,
+        node);
+
+    symTable.enterScope();
+    for (size_t i = 0; i < node.params.size(); ++i) {
+        symTable.insert(
+            node.params[i],
+            SymbolInfo(
+                node.params[i],
+                node.paramTypes[i],
+                SemanticSymbolKind::Parameter,
+                symTable.getCurrentLevel()));
+    }
+
+    Type* bodyType = node.body ? coerceUnknown(node.body->accept(*this)) : VoidType::instance();
+    for (size_t i = 0; i < node.params.size(); ++i) {
+        SymbolInfo* symbol = symTable.lookup(node.params[i]);
+        if (symbol && symbol->type) {
+            node.paramTypes[i] = coerceUnknown(symbol->type);
+        }
+        if (node.paramTypes[i]->equals(UnknownType::instance())) {
+            error(
+                SemanticPhase::Inference,
+                node,
+                "Could not infer the type of lambda parameter '" + node.params[i] + "'.",
+                {"Add an explicit lambda parameter type or use the lambda in a typed context."});
+        }
+    }
+    symTable.exitScope();
+
+    Type* returnType = node.declaredReturnType ? coerceUnknown(node.declaredReturnType) : bodyType;
+    if (node.declaredReturnType) {
+        checkTypeConformance(
+            bodyType,
+            node.declaredReturnType,
+            node,
+            "Lambda body does not conform to its declared return type.");
+    }
+    node.functionType = new FunctionType(node.paramTypes, returnType);
+    node.type = node.functionType;
+    return node.type;
+}
+
+Type* TypeInferenceVisitor::visit(VectorLiteralNode& node) {
+    if (collecting) {
+        if (collectingDependencies) {
+            for (auto* element : node.elements) {
+                if (element) element->accept(*this);
+            }
+        }
+        return nullptr;
+    }
+
+    Type* elementType = nullptr;
+    for (auto* element : node.elements) {
+        Type* current = element ? coerceUnknown(element->accept(*this)) : UnknownType::instance();
+        elementType = elementType ? typeRegistry.lowestCommonAncestor(elementType, current) : current;
+    }
+    if (!elementType || elementType->equals(UnknownType::instance())) {
+        elementType = ObjectType::instance();
+    }
+    node.type = new VectorType(elementType);
+    return node.type;
+}
+
+Type* TypeInferenceVisitor::visit(VectorComprehensionNode& node) {
+    if (collecting) {
+        if (collectingDependencies) {
+            if (node.iterable) node.iterable->accept(*this);
+            if (node.expression) node.expression->accept(*this);
+        }
+        return nullptr;
+    }
+
+    Type* sourceType = node.iterable ? coerceUnknown(node.iterable->accept(*this)) : UnknownType::instance();
+    Type* iteratorType = inferIterableElementType(sourceType, node.iterable ? *node.iterable : node);
+
+    symTable.enterScope();
+    symTable.insert(
+        node.iterator,
+        SymbolInfo(
+            node.iterator,
+            iteratorType,
+            SemanticSymbolKind::Variable,
+            symTable.getCurrentLevel()));
+    Type* elementType = node.expression ? coerceUnknown(node.expression->accept(*this)) : UnknownType::instance();
+    symTable.exitScope();
+
+    if (elementType->equals(UnknownType::instance())) {
+        elementType = ObjectType::instance();
+    }
+    node.type = new VectorType(elementType);
+    return node.type;
+}
+
+Type* TypeInferenceVisitor::visit(IndexAccessNode& node) {
+    if (collecting) {
+        if (collectingDependencies) {
+            if (node.base) node.base->accept(*this);
+            if (node.index) node.index->accept(*this);
+        }
+        return nullptr;
+    }
+
+    Type* baseType = node.base ? coerceUnknown(node.base->accept(*this)) : UnknownType::instance();
+    refineUnknownExpression(node.index, NumberType::instance());
+    Type* indexType = node.index ? coerceUnknown(node.index->accept(*this)) : UnknownType::instance();
+    if (!indexType->equals(UnknownType::instance()) && !isNumberType(indexType)) {
+        error(
+            SemanticPhase::Inference,
+            node,
+            "Vector index must be a Number.",
+            {"Index type: " + indexType->toString()});
+    }
+
+    if (auto* vector = asVectorType(baseType)) {
+        node.type = coerceUnknown(vector->elementType());
+        return node.type;
+    }
+
+    error(
+        SemanticPhase::Inference,
+        node,
+        "Indexing requires a vector value.",
+        {"Base type: " + safeTypeName(baseType)});
+    node.type = UnknownType::instance();
     return node.type;
 }
 

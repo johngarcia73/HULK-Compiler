@@ -33,6 +33,7 @@ build/
 bin/
 obj/
 out/
+.hulk_cache/
 
 # IDEs and Editors
 .github/

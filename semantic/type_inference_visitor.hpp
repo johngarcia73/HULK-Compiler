@@ -53,6 +53,7 @@ class TypeInferenceVisitor : public Visitor {
         const std::vector<std::string>& names,
         const std::vector<std::string>& declaredNames,
         std::vector<Type*>& types);
+    Type* inferIterableElementType(Type* sourceType, const ASTNode& node);
 
 public:
     TypeInferenceVisitor(
@@ -96,4 +97,8 @@ public:
     Type* visit(LetBindingNode& node) override;
     Type* visit(LetBindingsNode& node) override;
     Type* visit(TypeNode& node) override;
+    Type* visit(LambdaNode& node) override;
+    Type* visit(VectorLiteralNode& node) override;
+    Type* visit(VectorComprehensionNode& node) override;
+    Type* visit(IndexAccessNode& node) override;
 };

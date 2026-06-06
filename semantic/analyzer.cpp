@@ -58,7 +58,11 @@ void SemanticAnalyzer::registerBuiltinFunctions(SemanticContext& context) {
     insertBuiltin("sqrt", mathType);
 
     insertBuiltin("input", new FunctionType({}, StringType::instance()));
-    insertBuiltin("range", new FunctionType({NumberType::instance(), NumberType::instance()}, AnyType::instance()));
+    insertBuiltin(
+        "range",
+        new FunctionType(
+            {NumberType::instance(), NumberType::instance()},
+            new IterableType(NumberType::instance())));
     insertBuiltin(
         "_concat",
         new FunctionType(

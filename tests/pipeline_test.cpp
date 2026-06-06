@@ -7,12 +7,14 @@
 #include "../parser/Parser_Generator/genparser.hpp"
 #include "../lexer/lexer.hpp"
 #include "../semantic/analyzer.hpp"
+#include "frontend_cache.hpp"
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 static std::string resolve_path(std::initializer_list<const char*> candidates) {
     for (const char* candidate : candidates) {
@@ -32,6 +34,8 @@ struct RunnerOptions {
     bool dump_symbols = false;
     bool dump_deps = false;
     bool dump_tokens = true;
+    bool force_frontend_rebuild = false;
+    std::string frontend_cache_dir = ".hulk_cache";
 };
 
 static void print_section(const std::string& title) {
@@ -52,6 +56,125 @@ static void print_annotated_ast(ProgramNode* program) {
     }
     print_section("Annotated AST");
     program->print(std::cout);
+    std::cout << std::endl;
+}
+
+static bool is_focused_call(const FunctionCallNode* call) {
+    if (!call) {
+        return false;
+    }
+    return call->name == "range"
+        || call->name == "sum"
+        || call->name == "mean"
+        || call->name == "count_when"
+        || call->name == "filter"
+        || call->name == "invoke"
+        || call->name == "size"
+        || call->name == "iter"
+        || call->name == "next"
+        || call->name == "current";
+}
+
+static bool is_focused_ast_node(const ASTNode* node) {
+    return dynamic_cast<const ForNode*>(node)
+        || dynamic_cast<const VectorLiteralNode*>(node)
+        || dynamic_cast<const VectorComprehensionNode*>(node)
+        || dynamic_cast<const IndexAccessNode*>(node)
+        || dynamic_cast<const LambdaNode*>(node)
+        || is_focused_call(dynamic_cast<const FunctionCallNode*>(node));
+}
+
+static void collect_focused_ast_nodes(ASTNode* node, std::vector<ASTNode*>& focused) {
+    if (!node) {
+        return;
+    }
+
+    if (is_focused_ast_node(node)) {
+        focused.push_back(node);
+    }
+
+    if (auto* program = dynamic_cast<ProgramNode*>(node)) {
+        for (auto* decl : program->decls) collect_focused_ast_nodes(decl, focused);
+        for (auto* stmt : program->stmts) collect_focused_ast_nodes(stmt, focused);
+    } else if (auto* function = dynamic_cast<FunctionDeclNode*>(node)) {
+        collect_focused_ast_nodes(function->body, focused);
+        collect_focused_ast_nodes(function->exprBody, focused);
+    } else if (auto* exprStmt = dynamic_cast<ExprStmtNode*>(node)) {
+        collect_focused_ast_nodes(exprStmt->expr, focused);
+    } else if (auto* block = dynamic_cast<BlockNode*>(node)) {
+        for (auto* stmt : block->stmts) collect_focused_ast_nodes(stmt, focused);
+    } else if (auto* binary = dynamic_cast<BinaryOpNode*>(node)) {
+        collect_focused_ast_nodes(binary->left, focused);
+        collect_focused_ast_nodes(binary->right, focused);
+    } else if (auto* unary = dynamic_cast<UnaryOpNode*>(node)) {
+        collect_focused_ast_nodes(unary->operand, focused);
+    } else if (auto* let = dynamic_cast<LetNode*>(node)) {
+        collect_focused_ast_nodes(let->init, focused);
+        collect_focused_ast_nodes(let->body, focused);
+    } else if (auto* conditional = dynamic_cast<IfNode*>(node)) {
+        collect_focused_ast_nodes(conditional->condition, focused);
+        collect_focused_ast_nodes(conditional->then_branch, focused);
+        collect_focused_ast_nodes(conditional->else_branch, focused);
+    } else if (auto* call = dynamic_cast<FunctionCallNode*>(node)) {
+        collect_focused_ast_nodes(call->receiver, focused);
+        for (auto* arg : call->args) collect_focused_ast_nodes(arg, focused);
+    } else if (auto* assignment = dynamic_cast<AssignmentNode*>(node)) {
+        collect_focused_ast_nodes(assignment->target, focused);
+        collect_focused_ast_nodes(assignment->value, focused);
+    } else if (auto* member = dynamic_cast<MemberAccessNode*>(node)) {
+        collect_focused_ast_nodes(member->base, focused);
+    } else if (auto* newExpr = dynamic_cast<NewNode*>(node)) {
+        for (auto* arg : newExpr->args) collect_focused_ast_nodes(arg, focused);
+    } else if (auto* lambda = dynamic_cast<LambdaNode*>(node)) {
+        collect_focused_ast_nodes(lambda->body, focused);
+    } else if (auto* vector = dynamic_cast<VectorLiteralNode*>(node)) {
+        for (auto* element : vector->elements) collect_focused_ast_nodes(element, focused);
+    } else if (auto* comprehension = dynamic_cast<VectorComprehensionNode*>(node)) {
+        collect_focused_ast_nodes(comprehension->iterable, focused);
+        collect_focused_ast_nodes(comprehension->expression, focused);
+    } else if (auto* index = dynamic_cast<IndexAccessNode*>(node)) {
+        collect_focused_ast_nodes(index->base, focused);
+        collect_focused_ast_nodes(index->index, focused);
+    } else if (auto* loop = dynamic_cast<WhileNode*>(node)) {
+        collect_focused_ast_nodes(loop->condition, focused);
+        collect_focused_ast_nodes(loop->body, focused);
+    } else if (auto* loop = dynamic_cast<ForNode*>(node)) {
+        collect_focused_ast_nodes(loop->iterable, focused);
+        collect_focused_ast_nodes(loop->body, focused);
+    } else if (auto* attr = dynamic_cast<AttributeDeclNode*>(node)) {
+        collect_focused_ast_nodes(attr->init, focused);
+    } else if (auto* typeDecl = dynamic_cast<TypeDeclNode*>(node)) {
+        for (auto* arg : typeDecl->parentArgs) collect_focused_ast_nodes(arg, focused);
+        for (auto* member : typeDecl->members) collect_focused_ast_nodes(member, focused);
+    } else if (auto* protocol = dynamic_cast<ProtocolDeclNode*>(node)) {
+        for (auto* method : protocol->methods) collect_focused_ast_nodes(method, focused);
+    } else if (auto* ret = dynamic_cast<ReturnNode*>(node)) {
+        collect_focused_ast_nodes(ret->expr, focused);
+    } else if (auto* bindings = dynamic_cast<LetBindingsNode*>(node)) {
+        for (auto* binding : bindings->bindings) collect_focused_ast_nodes(binding, focused);
+    } else if (auto* binding = dynamic_cast<LetBindingNode*>(node)) {
+        collect_focused_ast_nodes(binding->init, focused);
+    }
+}
+
+static void print_focused_annotated_ast(ProgramNode* program) {
+    if (!program) {
+        return;
+    }
+
+    std::vector<ASTNode*> focused;
+    collect_focused_ast_nodes(program, focused);
+
+    print_section("Focused Annotated AST Nodes");
+    if (focused.empty()) {
+        std::cout << "<no focused nodes found>" << std::endl;
+        return;
+    }
+
+    for (size_t i = 0; i < focused.size(); ++i) {
+        std::cout << "\n--- Focused Node " << (i + 1) << " ---\n";
+        focused[i]->print(std::cout, 2);
+    }
     std::cout << std::endl;
 }
 
@@ -84,6 +207,10 @@ static void print_usage(const char* argv0) {
         << "  --dump-symbols      Dump the semantic symbol table\n"
         << "  --dump-deps         Dump the semantic dependency graph\n"
         << "  --dump-tokens       Ensure token stream dump is enabled\n"
+        << "  --force-frontend-rebuild\n"
+        << "                       Rebuild cached lexer DFA and parser tables\n"
+        << "  --frontend-cache-dir <dir>\n"
+        << "                       Cache directory for lexer/parser artifacts\n"
         << "  --help              Show this help message\n";
 }
 
@@ -104,6 +231,14 @@ static bool parse_args(int argc, char** argv, RunnerOptions& options) {
             options.dump_deps = true;
         } else if (arg == "--dump-tokens") {
             options.dump_tokens = true;
+        } else if (arg == "--force-frontend-rebuild") {
+            options.force_frontend_rebuild = true;
+        } else if (arg == "--frontend-cache-dir") {
+            if (i + 1 >= argc) {
+                std::cerr << "Missing value for --frontend-cache-dir\n";
+                return false;
+            }
+            options.frontend_cache_dir = argv[++i];
         } else if (arg == "--help") {
             print_usage(argv[0]);
             std::exit(0);
@@ -134,19 +269,19 @@ int main(int argc, char** argv) {
             }
         };
 
-        print_stage("Loading grammar.");
-        trace_pipeline("Loading grammar and building parser.");
-        Grammar grammar = build_grammar_from_file(
-            resolve_path({"../parser/Parser_Generator/grammar.y", "parser/Parser_Generator/grammar.y"}));
-        print_success("Grammar loaded.");
-
-        std::unordered_map<std::string, uint32_t> name_to_id;
-        for (size_t i = 0; i < grammar.symtab.size(); ++i)
-            name_to_id[grammar.symtab[i].name] = i;
+        FrontendCacheOptions cache_options;
+        cache_options.cache_dir = options.frontend_cache_dir;
+        cache_options.force_rebuild = options.force_frontend_rebuild;
+        cache_options.trace = options.trace_pipeline;
 
         print_stage("Building parser.");
-        uint32_t eof_id = name_to_id["$"];
-        LALRParser parser = LALRParser::from_grammar(grammar, eof_id);
+        trace_pipeline("Loading grammar and parser tables.");
+        CachedParserBundle parser_bundle = load_cached_parser(
+            resolve_path({"../parser/Parser_Generator/grammar.y", "parser/Parser_Generator/grammar.y"}),
+            cache_options);
+        Grammar& grammar = *parser_bundle.grammar;
+        auto& name_to_id = parser_bundle.name_to_id;
+        LALRParser& parser = *parser_bundle.parser;
         parser.set_builder(std::make_unique<ASTBuilder>(&grammar));
         print_success("Parser ready.");
 
@@ -164,8 +299,11 @@ int main(int argc, char** argv) {
         print_program_source(input);
 
         print_stage("Building lexer.");
-        trace_pipeline("Building lexer.");
-        Lexer lexer(default_token_specs());
+        trace_pipeline("Loading lexer DFA.");
+        Lexer lexer = load_cached_lexer(
+            default_token_specs(),
+            resolve_path({"../lexer/tokens.hpp", "lexer/tokens.hpp"}),
+            cache_options);
         print_success("Lexer ready.");
 
         print_stage("Tokenizing input.");
@@ -224,12 +362,14 @@ int main(int argc, char** argv) {
         }
         if (!semantic_result.success()) {
             if (options.dump_ast) {
-                print_annotated_ast(program);
+                print_focused_annotated_ast(program);
             }
             return 1;
         }
         print_success("Semantic analysis successful.");
-        print_annotated_ast(program);
+        if (options.dump_ast) {
+            print_focused_annotated_ast(program);
+        }
 
         /*
         // LLVM IR Generation
