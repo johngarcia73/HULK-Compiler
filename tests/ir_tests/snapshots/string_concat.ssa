@@ -1,4 +1,3 @@
-data $msg = align 8 { b "Result is %d \n ", b 0}
 data $string_literal_pointer0 = align 16 { w 7, b "Hello, ", b 0}
 data $string_literal_pointer1 = align 16 { w 5, b "World", b 0}
 data $string_literal_pointer2 = align 16 { w 1, b "!", b 0}
@@ -6,13 +5,19 @@ data $string_literal_pointer2 = align 16 { w 1, b "!", b 0}
 
 export function w $main() {
 @start
+    #Initialize GC
+    call $_hulk_gc_init()
+    #Handle print function call
     %string_literal_pointer0 = l copy $string_literal_pointer0
     %string_literal_pointer1 = l copy $string_literal_pointer1
-    %concat1 = l call $_string_concat(l %string_literal_pointer0, l %string_literal_pointer1)
+    %left_str1 = l call $_l_to_string(l %string_literal_pointer0,w 3)
+    %right_str1 = l call $_l_to_string(l %string_literal_pointer1,w 3)
+    %concat1 = l call $_string_concat(l %left_str1, l %right_str1)
     %string_literal_pointer2 = l copy $string_literal_pointer2
-    %concat2 = l call $_string_concat(l %concat1, l %string_literal_pointer2)
-    %call_result1 = l call $_print( l %concat2)
-    call $printf(l $msg,...,l %call_result1)
-    call $_hulk_cleanup()
+    %left_str2 = l call $_l_to_string(l %concat1,w 3)
+    %right_str2 = l call $_l_to_string(l %string_literal_pointer2,w 3)
+    %concat2 = l call $_string_concat(l %left_str2, l %right_str2)
+    %print_arg_str1 = l call $_l_to_string(l %concat2,w 3)
+    %print_result1 = l call $_print(l %print_arg_str1)
     ret 0
 }

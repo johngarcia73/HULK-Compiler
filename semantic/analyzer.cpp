@@ -97,7 +97,8 @@ SemanticAnalysisResult SemanticAnalyzer::analyze(
     registerBuiltinFunctions(context);
 
     DependencyGraph graph;
-    TypeInferenceVisitor inferencer(symTable, graph, context);
+    NominalTypeRegistry typeRegistry;
+    TypeInferenceVisitor inferencer(symTable, graph, typeRegistry, context);
 
     context.tracePipeline("Collecting declarations and dependencies.");
     inferencer.collectDeclarations(root);
@@ -118,6 +119,9 @@ SemanticAnalysisResult SemanticAnalyzer::analyze(
     for (auto* function : orderedFunctions) {
         inferencer.analyzeFunction(function);
     }
+
+    context.tracePipeline("Analyzing type declarations.");
+    inferencer.analyzeTypes();
 
     context.tracePipeline("Analyzing global statements.");
     inferencer.analyzeGlobals(root);

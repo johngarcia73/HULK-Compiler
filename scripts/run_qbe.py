@@ -69,13 +69,16 @@ def compile_qbe(sh: Shell, ssa_path: str, asm_path: str) -> None:
         sys.exit(1)
 
 def compile_cc(sh: Shell, asm_path: str, out_bin: str, args: argparse.Namespace) -> None:
-    cc_args = ["cc", asm_path, "-o", out_bin]
-    cc_args.extend(args.link_c_file)
-    cc_args.extend(args.link_object)
-    
+    cc_args = ["cc",asm_path,"-o", out_bin]
+   
+     # 2. Add source code files next (these create dependencies)
     if args.use_runtime:
         cc_args.append(os.path.join("runtime", "runtime.c"))
-
+    cc_args.extend(args.link_c_file)
+    
+    # 3. Add static libraries / objects LAST (these resolve dependencies)
+    cc_args.extend(args.link_object)
+    
     cmd_cc = " ".join(cc_args)
     res = sh >> cmd_cc
     if res and res.startswith("Error:"):

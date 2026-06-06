@@ -1,0 +1,36 @@
+data $string_literal_pointer0 = align 16 { w 3, b "Ada", b 0}
+
+
+#Functions of type Person
+export function d $__Person_hash( l %_self1){
+@start
+    %num_literal1 =d copy d_1
+    ret %num_literal1
+}
+
+export function l $__Person_describe( l %_self2){
+@start
+    %_self2_name1 = l add %_self2, 0
+    %field_value1 = l loadl %_self2_name1
+    ret %field_value1
+}
+
+export function w $main() {
+@start
+    #Initialize GC
+    call $_hulk_gc_init()
+    # Initialize and object of type Person
+    %Person_obj1 = l call $_hulk_alloc(l 8)
+    #Evaluate constructor args expressions of typePerson
+    %string_literal_pointer0 = l copy $string_literal_pointer0
+    # Initialize field name
+    %Person_obj_name1 = l add %Person_obj1, 0
+    storel %string_literal_pointer0, %Person_obj_name1
+    %_person1 = l copy %Person_obj1 
+    #Handle print function call
+    %call_result1 = l call $__Person_describe( l %_person1)
+    %print_arg_str1 = l call $_l_to_string(l %call_result1,w 3)
+    %print_result1 = l call $_print(l %print_arg_str1)
+    %let_in_result1 = l copy %print_result1
+    ret 0
+}

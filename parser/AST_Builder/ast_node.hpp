@@ -27,8 +27,9 @@ inline void indent(std::ostream &o, int n) {
 
 struct NumberNode : ASTNode {
     std::string value;    // lexical representation of the number
-    std::string kind;     // numeric kind: "int", "float", "double", etc.
-    NumberNode(const std::string& v, const std::string& kind = "int");
+    NumberKind numberKind;
+    NumberNode(const std::string& v, NumberKind kind = NumberKind::Int);
+    NumberNode(long long v, NumberKind kind = NumberKind::Int);
     long long asInt() const;
     double asDouble() const;
     bool isWellFormed() const;
@@ -107,7 +108,11 @@ struct ProgramNode : ASTNode {
 struct ParamListNode : ASTNode {
     std::vector<std::string> params;
     std::vector<Type*> paramTypes;
-    ParamListNode(std::vector<std::string> p, std::vector<Type*> pt);
+    std::vector<std::string> paramTypeNames;
+    ParamListNode(
+        std::vector<std::string> p,
+        std::vector<Type*> pt,
+        std::vector<std::string> ptn = {});
     void print(std::ostream& o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
 };
@@ -116,9 +121,16 @@ struct FunctionDeclNode : ASTNode {
     std::string name;
     std::vector<std::string> params;
     std::vector<Type*> paramTypes;
+    std::vector<std::string> paramTypeNames;
     Type* returnType;
     Type* declaredReturnType;
+    std::string declaredReturnTypeName;
     bool hasExplicitReturnType = false;
+    bool isMethod = false;
+    std::string ownerTypeName;
+    bool isSignatureOnly = false;
+    bool isProtocolMethod = false;
+    std::string ownerProtocolName;
 
     ASTNodePtr body;       // nullptr if inline
     bool isInline;
@@ -138,9 +150,12 @@ struct FunctionDeclNode : ASTNode {
 };
 struct LetNode : ASTNode {
     std::string name;
+    Type* declaredType = nullptr;
+    std::string declaredTypeName;
+    bool hasExplicitType = false;
     ASTNodePtr init;
     ASTNodePtr body;
-    LetNode(std::string n, ASTNodePtr i, ASTNodePtr b);
+    LetNode(std::string n, ASTNodePtr i, ASTNodePtr b, Type* dt = nullptr, std::string dtn = "", bool explicitType = false);
     ~LetNode();
     void print(std::ostream& o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
@@ -158,20 +173,22 @@ struct IfNode : ASTNode {
 
 struct FunctionCallNode : ASTNode {
     std::string name;
+    ASTNodePtr receiver = nullptr;
     std::vector<ASTNodePtr> args;
     FunctionType* resolvedFunctionType = nullptr;
     std::string overloadStatus;
     std::vector<std::string> overloadNotes;
-    FunctionCallNode(std::string n, std::vector<ASTNodePtr> a);
+    FunctionCallNode(std::string n, std::vector<ASTNodePtr> a, ASTNodePtr r = nullptr);
     ~FunctionCallNode();
     void print(std::ostream& o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
 };
 
 struct AssignmentNode : ASTNode {
-    std::string target;
+    ASTNodePtr target;
     ASTNodePtr value;
     AssignmentNode(std::string t, ASTNodePtr v);
+    AssignmentNode(ASTNodePtr t, ASTNodePtr v);
     ~AssignmentNode();
     void print(std::ostream& o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
@@ -216,8 +233,11 @@ struct ForNode : ASTNode {
 
 struct AttributeDeclNode : ASTNode {
     std::string name;
+    Type* declaredType = nullptr;
+    std::string declaredTypeName;
+    bool hasExplicitType = false;
     ASTNodePtr init;
-    AttributeDeclNode(std::string n, ASTNodePtr i);
+    AttributeDeclNode(std::string n, ASTNodePtr i, Type* dt = nullptr, std::string dtn = "", bool explicitType = false);
     ~AttributeDeclNode();
     void print(std::ostream& o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
@@ -226,11 +246,21 @@ struct AttributeDeclNode : ASTNode {
 struct TypeDeclNode : ASTNode {
     std::string name;
     std::vector<std::string> ctorParams;
+    std::vector<Type*> ctorParamTypes;
+    std::vector<std::string> ctorParamTypeNames;
     std::string parentType;
     std::vector<ASTNodePtr> parentArgs;
+    bool hasExplicitParentArgs = false;
     std::vector<ASTNodePtr> members;
-    TypeDeclNode(std::string n, std::vector<std::string> cp, std::string pt, 
-                 std::vector<ASTNodePtr> pa, std::vector<ASTNodePtr> m);
+    TypeDeclNode(
+        std::string n,
+        std::vector<std::string> cp,
+        std::vector<Type*> cpt,
+        std::vector<std::string> cptn,
+        std::string pt,
+        std::vector<ASTNodePtr> pa,
+        std::vector<ASTNodePtr> m,
+        bool explicitParentArgs = false);
     ~TypeDeclNode();
     void print(std::ostream& o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
@@ -252,8 +282,11 @@ struct ProtocolDeclNode : ASTNode {
 
 struct LetBindingNode : ASTNode {
     std::string name;
+    Type* declaredType = nullptr;
+    std::string declaredTypeName;
+    bool hasExplicitType = false;
     ASTNodePtr init;
-    LetBindingNode(std::string n, ASTNodePtr i);
+    LetBindingNode(std::string n, ASTNodePtr i, Type* dt = nullptr, std::string dtn = "", bool explicitType = false);
     ~LetBindingNode();
     void print(std::ostream& o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
@@ -269,8 +302,9 @@ struct LetBindingsNode : ASTNode {
 };
 
 struct TypeNode : ASTNode {
-    Type* type;
+    std::string typeName;
     TypeNode(Type* t);
+    TypeNode(std::string name, Type* t = nullptr);
     void print(std::ostream& o, int indent_n = 0) const override;
     Type* accept(Visitor& v) override;
 };

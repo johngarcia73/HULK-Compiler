@@ -4,6 +4,7 @@
 #include <vector>
 #include <optional>
 #include "../../common/token.hpp"
+#include "../utils/Grammar/grammar.hpp"
 
 struct Value {
     ASTNode* node = nullptr;
@@ -32,7 +33,9 @@ struct Value {
 };
 
 struct ASTBuilder {
-    ASTBuilder() = default;
+    const Grammar* grammar = nullptr;
+
+    explicit ASTBuilder(const Grammar* g = nullptr) : grammar(g) {}
     ~ASTBuilder() = default;
 
     ASTNode* build(size_t production_id, const std::vector<Value>& rhs);

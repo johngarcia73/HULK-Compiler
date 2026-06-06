@@ -1,0 +1,75 @@
+data $string_literal_pointer0 = align 16 { w 6, b "Point(", b 0}
+data $string_literal_pointer1 = align 16 { w 2, b ", ", b 0}
+data $string_literal_pointer2 = align 16 { w 1, b ")", b 0}
+
+
+#Functions of type Point
+export function d $__Point_getX( l %_self1){
+@start
+    %_self1_x1 = l add %_self1, 0
+    %field_value1 = d loadd %_self1_x1
+    ret %field_value1
+}
+
+export function d $__Point_getY( l %_self2){
+@start
+    %_self2_y1 = l add %_self2, 8
+    %field_value2 = d loadd %_self2_y1
+    ret %field_value2
+}
+
+export function l $__Point_setY( d %_val1, l %_self3){
+@start
+    %_self3_y1 = l add %_self3, 8
+    stored %_val1, %_self3_y1
+    ret 0
+}
+
+export function l $__Point_describe( l %_self4){
+@start
+    %string_literal_pointer0 = l copy $string_literal_pointer0
+    %call_result1 = d call $__Point_getX( l %_self4)
+    %left_str1 = l call $_l_to_string(l %string_literal_pointer0,w 3)
+    %right_str1 = l call $_d_to_string(d %call_result1,w 1)
+    %concat1 = l call $_string_concat(l %left_str1, l %right_str1)
+    %string_literal_pointer1 = l copy $string_literal_pointer1
+    %left_str2 = l call $_l_to_string(l %concat1,w 3)
+    %right_str2 = l call $_l_to_string(l %string_literal_pointer1,w 3)
+    %concat2 = l call $_string_concat(l %left_str2, l %right_str2)
+    %call_result2 = d call $__Point_getY( l %_self4)
+    %string_literal_pointer2 = l copy $string_literal_pointer2
+    %left_str3 = l call $_d_to_string(d %call_result2,w 1)
+    %right_str3 = l call $_l_to_string(l %string_literal_pointer2,w 3)
+    %concat3 = l call $_string_concat(l %left_str3, l %right_str3)
+    %left_str4 = l call $_l_to_string(l %concat2,w 3)
+    %right_str4 = l call $_l_to_string(l %concat3,w 3)
+    %concat4 = l call $_string_concat(l %left_str4, l %right_str4)
+    ret %concat4
+}
+
+export function w $main() {
+@start
+    #Initialize GC
+    call $_hulk_gc_init()
+    # Initialize and object of type Point
+    %Point_obj1 = l call $_hulk_alloc(l 16)
+    #Evaluate constructor args expressions of typePoint
+    %num_literal1 =d copy d_3
+    %num_literal2 =d copy d_4
+    # Initialize field x
+    %Point_obj_x1 = l add %Point_obj1, 0
+    stored %num_literal1, %Point_obj_x1
+    # Initialize field y
+    %Point_obj_y1 = l add %Point_obj1, 8
+    stored %num_literal2, %Point_obj_y1
+    %_p1 = l copy %Point_obj1 
+    %num_literal3 =d copy d_100
+    %call_result3 = l call $__Point_setY( d %num_literal3, l %_p1)
+    #Handle print function call
+    %call_result4 = l call $__Point_describe( l %_p1)
+    %print_arg_str1 = l call $_l_to_string(l %call_result4,w 3)
+    %print_result1 = l call $_print(l %print_arg_str1)
+    %block_result1 = l copy %print_result1
+    %let_in_result1 = l copy %block_result1
+    ret 0
+}

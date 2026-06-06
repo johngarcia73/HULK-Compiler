@@ -7,18 +7,24 @@
 #include "../parser/Parser_Generator/genparser.hpp"
 #include "../lexer/lexer.hpp"
 #include "../semantic/analyzer.hpp"
-#include "../ir_generator/llvm_ir_generator.hpp"
-#include "../ir_generator/llvm_ir_executor.hpp"
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <string>
 
-std::string grammar_dir = "../parser/Parser_Generator/grammar.y";
+static std::string resolve_path(std::initializer_list<const char*> candidates) {
+    for (const char* candidate : candidates) {
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+    }
+    throw std::runtime_error("Cannot resolve project path for pipeline test.");
+}
 
 struct RunnerOptions {
-    std::string program_path = "program.hulk";
+    std::string program_path = resolve_path({"program.hulk", "tests/program.hulk"});
     bool trace_pipeline = true;
     bool trace_inference = true;
     bool trace_overloads = true;
@@ -130,7 +136,8 @@ int main(int argc, char** argv) {
 
         print_stage("Loading grammar.");
         trace_pipeline("Loading grammar and building parser.");
-        Grammar grammar = build_grammar_from_file(grammar_dir);
+        Grammar grammar = build_grammar_from_file(
+            resolve_path({"../parser/Parser_Generator/grammar.y", "parser/Parser_Generator/grammar.y"}));
         print_success("Grammar loaded.");
 
         std::unordered_map<std::string, uint32_t> name_to_id;
@@ -140,7 +147,7 @@ int main(int argc, char** argv) {
         print_stage("Building parser.");
         uint32_t eof_id = name_to_id["$"];
         LALRParser parser = LALRParser::from_grammar(grammar, eof_id);
-        parser.set_builder(std::make_unique<ASTBuilder>());
+        parser.set_builder(std::make_unique<ASTBuilder>(&grammar));
         print_success("Parser ready.");
 
         print_stage("Loading input source.");
@@ -247,3 +254,4 @@ int main(int argc, char** argv) {
         return 2;
     }
 }
+//

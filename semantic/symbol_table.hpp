@@ -4,6 +4,7 @@
 #include <vector>
 #include <iostream>
 #include <sstream>
+#include <functional>
 #include "type.hpp"
 
 using namespace std;
@@ -12,6 +13,7 @@ enum class SemanticSymbolKind {
     Variable,
     Parameter,
     Function,
+    Self,
     // Future: Class, Field, Method, ...
 };
 
@@ -125,31 +127,45 @@ class SemanticSymbolTable {
     std::vector<std::unordered_map<std::string, SymbolInfo>> scopes;
     int currentLevel = 0;
 
-    static bool areTypesCompatible(Type* paramType, Type* argType) {
+    static bool defaultConforms(Type* actual, Type* expected) {
+        return typeConforms(actual, expected);
+    }
+
+    static bool areTypesCompatible(
+        Type* paramType,
+        Type* argType,
+        const std::function<bool(Type*, Type*)>& conforms) {
         if (!paramType || !argType) {
             return false;
         }
-        if (paramType->equals(AnyType::instance()) || argType->equals(AnyType::instance())) {
-            return true;
-        }
-        if (paramType->equals(UnknownType::instance()) || argType->equals(UnknownType::instance())) {
-            return true;
-        }
-        return paramType->equals(argType);
+        return conforms(argType, paramType);
     }
 
-    static int compatibilityCost(Type* paramType, Type* argType) {
+    static int compatibilityCost(
+        Type* paramType,
+        Type* argType,
+        const std::function<bool(Type*, Type*)>& conforms) {
         if (!paramType || !argType) {
             return 1000;
         }
         if (paramType->equals(argType)) {
             return 0;
         }
+        if (paramType->equals(UnknownType::instance())) {
+            return 4;
+        }
         if (paramType->equals(AnyType::instance())) {
             return 3;
         }
-        if (paramType->equals(UnknownType::instance())) {
-            return 2;
+        if (conforms(argType, paramType)) {
+            return 1;
+        }
+        if (isNumberType(paramType) && isNumberType(argType)) {
+            auto* expectedNumber = asNumberType(paramType);
+            auto* actualNumber = asNumberType(argType);
+            if (expectedNumber && actualNumber && expectedNumber->isGeneric()) {
+                return actualNumber->isGeneric() ? 0 : 1;
+            }
         }
         if (argType->equals(AnyType::instance()) || argType->equals(UnknownType::instance())) {
             return 1;
@@ -249,7 +265,10 @@ public:
         }
     }
 
-    OverloadResolutionResult resolveFunction(const std::string& name, const std::vector<Type*>& argTypes) {
+    OverloadResolutionResult resolveFunction(
+        const std::string& name,
+        const std::vector<Type*>& argTypes,
+        std::function<bool(Type*, Type*)> conforms = defaultConforms) {
         OverloadResolutionResult result;
         SymbolInfo* info = lookup(name);
         if (!info) {
@@ -283,8 +302,8 @@ public:
             int score = 0;
 
             for (size_t i = 0; i < params.size(); ++i) {
-                if (areTypesCompatible(params[i], argTypes[i])) {
-                    score += compatibilityCost(params[i], argTypes[i]);
+                if (areTypesCompatible(params[i], argTypes[i], conforms)) {
+                    score += compatibilityCost(params[i], argTypes[i], conforms);
                     continue;
                 }
                 match = false;
@@ -340,7 +359,10 @@ public:
         return result;
     }
 
-    FunctionType* lookupFunction(const std::string& name, const std::vector<Type*>& argTypes) {
-        return resolveFunction(name, argTypes).selected;
+    FunctionType* lookupFunction(
+        const std::string& name,
+        const std::vector<Type*>& argTypes,
+        std::function<bool(Type*, Type*)> conforms = defaultConforms) {
+        return resolveFunction(name, argTypes, std::move(conforms)).selected;
     }
 };

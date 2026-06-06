@@ -1,0 +1,31 @@
+
+
+#Functions of type Counter
+export function d $__Counter_value( l %_self1){
+@start
+    %_self1_current1 = l add %_self1, 0
+    %field_value1 = d loadd %_self1_current1
+    ret %field_value1
+}
+
+export function w $main() {
+@start
+    #Initialize GC
+    call $_hulk_gc_init()
+    # Initialize and object of type Counter
+    %Counter_obj1 = l call $_hulk_alloc(l 8)
+    #Evaluate constructor args expressions of typeCounter
+    %num_literal1 =d copy d_4
+    # Initialize field current
+    %Counter_obj_current1 = l add %Counter_obj1, 0
+    %num_literal2 =d copy d_1
+    %addition1 = d add %num_literal1, %num_literal2
+    stored %addition1, %Counter_obj_current1
+    %_c1 = l copy %Counter_obj1 
+    #Handle print function call
+    %call_result1 = d call $__Counter_value( l %_c1)
+    %print_arg_str1 = l call $_d_to_string(d %call_result1,w 1)
+    %print_result1 = l call $_print(l %print_arg_str1)
+    %let_in_result1 = d copy %call_result1
+    ret 0
+}

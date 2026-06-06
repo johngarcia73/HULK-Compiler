@@ -3,18 +3,22 @@
 #include <string>
 #include "../semantic/visitor.hpp"
 #include "../common/string_builder.hpp"
-#include "../ir_generator/scope_table.hpp"
+#include "scope_table.hpp"
+#include "lowering.hpp"
 #include "string_pool.hpp"
 #include "name_generator.hpp"
-#include "target_info.hpp"
+#include "type_utils.hpp"
+#include "type_register.hpp"
 #include <unordered_map>
 #include <vector>
+
+
 
 class ASTNode;
 
 class IrGenerator : public Visitor {
 private:
-    TargetInfo targetInfo=TargetInfo::getNative();
+    TypeUtils::TargetInfo targetInfo = TypeUtils::TargetInfo::getNative();
     StringPool stringPool;
     StringBuilder dataBuilder;
     StringBuilder codeBuilder;
@@ -22,12 +26,11 @@ private:
     std::string nameForCurrentExpression;
     std::string typeForCurrentExpression;
     ScopeTable scopeTable;
+    TypeRegister typeRegister;
     
-
 public:
     virtual ~IrGenerator() = default;
     std::string generate(ASTNode& node);
-    std::string hulkTypeToQbeType(Type* type);
     Type* visit(ProgramNode& node) override;
     Type* visit(BlockNode& node) override;
     Type* visit(FunctionDeclNode& node) override;
@@ -49,4 +52,9 @@ public:
     Type* visit(AssignmentNode& node) override;
     Type* visit(WhileNode& node) override;
     Type* visit(ForNode& node) override;
+    Type* visit(MemberAccessNode& node) override;
+    Type* visit(NewNode& node) override;
+    Type* visit(AttributeDeclNode& node) override;
+    Type* visit(TypeDeclNode& node) override;
+    Type* visit(ProtocolDeclNode& node) override;
 };
