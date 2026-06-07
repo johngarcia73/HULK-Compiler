@@ -20,7 +20,7 @@ SRCS = \
     ../semantic/analyzer.cpp \
     ../semantic/type_inference_visitor.cpp \
     ../semantic/dependency_graph.cpp \
-    frontend_cache.cpp \
+    ../compiler/frontend_cache.cpp \
     pipeline_test.cpp
 
 OBJS = $(SRCS:.cpp=.o)
@@ -28,7 +28,7 @@ TARGET = test
 
 all: $(TARGET)
 
-# Regla de enlace: añade LDFLAGS y LDLIBS
+# Adds LDFLAGS y LDLIBS
 $(TARGET): $(OBJS)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 

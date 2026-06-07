@@ -7,7 +7,7 @@
 #include "../parser/Parser_Generator/genparser.hpp"
 #include "../lexer/lexer.hpp"
 #include "../semantic/analyzer.hpp"
-#include "frontend_cache.hpp"
+#include "../compiler/frontend_cache.hpp"
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
