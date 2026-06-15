@@ -3,9 +3,9 @@
 #include "lowering.hpp"
 #include "type_utils.hpp"
 
-std::string IrGenerator::generate(ASTNode& node) {
+std::string IrGenerator::generate(ASTNodePtr node) {
     TypeUtils::setTarget(this->targetInfo);
-    node.accept(*this);  
+    node->accept(*this);  
     return dataBuilder.toString() +
                             "\n\n"+ 
             codeBuilder.toString();
@@ -608,6 +608,8 @@ Type* IrGenerator::visit(ProtocolDeclNode& node) {
     return nullptr; 
 }
 
+
+
 Type* IrGenerator::visit(FunctionDeclNode& node) 
 { 
     if(node.isMethod){
@@ -676,6 +678,27 @@ Type* IrGenerator::visit(TypeDeclNode &node) {
     return nullptr;
 }
 //###########################################################################
+
+//#####TODOS####################################################
+Type *IrGenerator::visit(LambdaNode &node)
+{
+    return nullptr;
+}
+Type *IrGenerator::visit(VectorLiteralNode &node)
+{
+    return nullptr;
+}
+Type *IrGenerator::visit(VectorComprehensionNode &node)
+{
+    return nullptr;
+}
+Type *IrGenerator::visit(IndexAccessNode &node)
+{
+    return nullptr;
+}
+
+
+//###############################################################
 
 //################# AUX ######################################################
 //TODO agree if posible to delete this types if not visitor use them.

@@ -30,7 +30,7 @@ private:
     
 public:
     virtual ~IrGenerator() = default;
-    std::string generate(ASTNode& node);
+    std::string generate(ASTNodePtr node);
     Type* visit(ProgramNode& node) override;
     Type* visit(BlockNode& node) override;
     Type* visit(FunctionDeclNode& node) override;
@@ -57,4 +57,8 @@ public:
     Type* visit(AttributeDeclNode& node) override;
     Type* visit(TypeDeclNode& node) override;
     Type* visit(ProtocolDeclNode& node) override;
+    Type* visit(LambdaNode& node) override;
+    Type* visit(VectorLiteralNode& node) override;
+    Type* visit(VectorComprehensionNode& node) override;
+    Type* visit(IndexAccessNode &node) override;
 };

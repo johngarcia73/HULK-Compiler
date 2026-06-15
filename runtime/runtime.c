@@ -13,12 +13,12 @@ typedef enum{
 
 //################ GARGABE COLLECTOR RUNTIME #####################
 void _hulk_gc_init(){
-    printf("DEBUG:Creating GC heap...\n");
+    //printf("DEBUG:Creating GC heap...\n");
     GC_init();
 }
 void* _hulk_alloc(size_t size) {
     void  *address = GC_malloc(size);
-    printf("DEBUG: Allocated %zu bytes on address %p \n", size, address);
+    //printf("DEBUG: Allocated %zu bytes on address %p \n", size, address);
     return address;
 }
 //################ BUILT-IN LENGUAJE FUNCTIONS #####################
@@ -77,7 +77,7 @@ static char* _create_hulk_string(const char* buffer, int len) {
     }
     else
     {    
-        printf("WARNING: Failed to create Hulk string\n");
+        //printf("WARNING: Failed to create Hulk string\n");
     }
     return result;
 }
