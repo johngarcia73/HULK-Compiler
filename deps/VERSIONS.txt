@@ -1,0 +1,2 @@
+qbe: 1.2 (from https://c9x.me/compile/qbe-1.2.tar.gz)
+bdwgc: 8.2.8 (from https://github.com/ivmai/bdwgc/releases/tag/v8.2.8)
