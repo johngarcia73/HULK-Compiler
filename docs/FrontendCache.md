@@ -11,7 +11,8 @@ ASTs, semantic state, symbol tables, diagnostics, or backend artifacts.
 
 ## Default behavior
 
-`tests/pipeline_test.cpp` uses the cache automatically.
+`compiler/frontend_pipeline.cpp` and `tests/pipeline_test.cpp` use the cache
+automatically.
 
 On startup, the runner tries to load:
 
@@ -76,7 +77,7 @@ or:
 
 ## Programmatic API
 
-The reusable API lives in `tests/frontend_cache.hpp`.
+The reusable API lives in `compiler/frontend_cache.hpp`.
 
 ```cpp
 FrontendCacheOptions options;
