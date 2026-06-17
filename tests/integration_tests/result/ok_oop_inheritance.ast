@@ -1,0 +1,138 @@
+Program [type=Void, span=1:1-18:2]
+  Declarations
+    TypeDecl(Animal) [type=Animal, span=1:1-4:2]
+      CtorParams:
+        n: String
+      ParentType: Object
+      ParentArgsMode: implicit
+      Members:
+        AttributeDecl(name) [type=String, span=2:5-2:22]
+          DeclaredType: String
+          Init:
+            Variable(n) [type=String, span=2:20-2:21]
+        FunctionDecl(sound) [type=() -> String, span=3:5-3:31]
+          Mode: block
+          DeclaredReturn: String
+          DeclaredReturnName: String
+          ResolvedReturn: String
+          Signature: () -> String
+          InferredFunctionType: () -> String
+          MethodOwner: Animal
+          Params: <none>
+          Body:
+            Block [type=String, span=3:21-3:31]
+              ExprStmt [type=String, span=3:23-3:29]
+                String("...") [type=String, span=3:23-3:28]
+          ExprBody: <none>
+    TypeDecl(Dog) [type=Dog, span=6:1-8:2]
+      CtorParams:
+        n: String
+      ParentType: Animal
+      ParentArgsMode: explicit
+      ParentArgs:
+        Variable(n) [type=String, span=6:37-6:38]
+      Members:
+        FunctionDecl(sound) [type=() -> String, span=7:5-7:32]
+          Mode: block
+          DeclaredReturn: String
+          DeclaredReturnName: String
+          ResolvedReturn: String
+          Signature: () -> String
+          InferredFunctionType: () -> String
+          MethodOwner: Dog
+          Params: <none>
+          Body:
+            Block [type=String, span=7:21-7:32]
+              ExprStmt [type=String, span=7:23-7:30]
+                String("Woof") [type=String, span=7:23-7:29]
+          ExprBody: <none>
+    TypeDecl(Cat) [type=Cat, span=10:1-12:2]
+      CtorParams:
+        n: String
+      ParentType: Animal
+      ParentArgsMode: explicit
+      ParentArgs:
+        Variable(n) [type=String, span=10:37-10:38]
+      Members:
+        FunctionDecl(sound) [type=() -> String, span=11:5-11:32]
+          Mode: block
+          DeclaredReturn: String
+          DeclaredReturnName: String
+          ResolvedReturn: String
+          Signature: () -> String
+          InferredFunctionType: () -> String
+          MethodOwner: Cat
+          Params: <none>
+          Body:
+            Block [type=String, span=11:21-11:32]
+              ExprStmt [type=String, span=11:23-11:30]
+                String("Meow") [type=String, span=11:23-11:29]
+          ExprBody: <none>
+  Statements
+    ExprStmt [type=Void, span=15:5-15:48]
+      Let(d) [type=Void, span=15:5-15:47]
+        Init:
+          New(Dog) [type=Dog, span=15:13-15:27]
+            String("Rex") [type=String, span=15:21-15:26]
+        Body:
+          FunctionCall(print) [type=Void, span=15:31-15:47]
+            Receiver: <none>
+            ResolvedOverload: (String) -> Void
+            OverloadStatus: resolved
+            OverloadNotes:
+              Selected overload: (String) -> Void
+              Candidate (Number) -> Void: argument 1 expected Number but got String
+              Candidate (String) -> Void matched.
+              Candidate (Unknown) -> Void matched.
+            FunctionCall(sound) [type=String, span=15:37-15:46]
+              Receiver:
+                Variable(d) [type=Dog, span=15:37-15:38]
+              ResolvedOverload: () -> String
+              OverloadStatus: resolved
+              OverloadNotes:
+                Selected method: Dog.() -> String
+    ExprStmt [type=Void, span=16:5-16:53]
+      Let(c) [type=Void, span=16:5-16:52]
+        Init:
+          New(Cat) [type=Cat, span=16:13-16:32]
+            String("Whiskers") [type=String, span=16:21-16:31]
+        Body:
+          FunctionCall(print) [type=Void, span=16:36-16:52]
+            Receiver: <none>
+            ResolvedOverload: (String) -> Void
+            OverloadStatus: resolved
+            OverloadNotes:
+              Selected overload: (String) -> Void
+              Candidate (Number) -> Void: argument 1 expected Number but got String
+              Candidate (String) -> Void matched.
+              Candidate (Unknown) -> Void matched.
+            FunctionCall(sound) [type=String, span=16:42-16:51]
+              Receiver:
+                Variable(c) [type=Cat, span=16:42-16:43]
+              ResolvedOverload: () -> String
+              OverloadStatus: resolved
+              OverloadNotes:
+                Selected method: Cat.() -> String
+    ExprStmt [type=Void, span=17:5-17:58]
+      Let(a) [type=Void, span=17:5-17:57]
+        DeclaredType: Animal
+        Init:
+          New(Dog) [type=Dog, span=17:21-17:37]
+            String("Buddy") [type=String, span=17:29-17:36]
+        Body:
+          FunctionCall(print) [type=Void, span=17:41-17:57]
+            Receiver: <none>
+            ResolvedOverload: (String) -> Void
+            OverloadStatus: resolved
+            OverloadNotes:
+              Selected overload: (String) -> Void
+              Candidate (Number) -> Void: argument 1 expected Number but got String
+              Candidate (String) -> Void matched.
+              Candidate (Unknown) -> Void matched.
+            FunctionCall(sound) [type=String, span=17:47-17:56]
+              Receiver:
+                Variable(a) [type=Animal, span=17:47-17:48]
+              ResolvedOverload: () -> String
+              OverloadStatus: resolved
+              OverloadNotes:
+                Selected method: Animal.() -> String

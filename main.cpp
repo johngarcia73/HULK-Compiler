@@ -19,6 +19,7 @@ int main(int argc, char** argv) {
     std::string input_file;
     std::string output_exe = "output";
     bool verbose = false;
+    bool debug = false;
 
     app.add_option("input", input_file, "Source file (.hulk)")
         ->required()
@@ -27,6 +28,7 @@ int main(int argc, char** argv) {
     app.add_option("-o,--output", output_exe, "Output executable name (default: output)");
 
     app.add_flag("-v,--verbose", verbose, "Print commands as they are executed");
+    app.add_flag("--debug", debug, "Output the AST of the compiler frontend");
 
     // CLI11 automatically adds --help and --version; we only customise version string
     app.set_version_flag("--version", "Hulk compiler 0.1");
@@ -45,6 +47,19 @@ int main(int argc, char** argv) {
         return exit_code_for(frontend);
     }
 
+    if (debug) {
+        
+        std::string ast_file = output_exe+".ast";
+
+        std::ofstream out(ast_file);
+        if (!out) {
+            std::cerr << "Error: cannot write to " << ast_file << '\n';
+            return 4;
+        }
+        frontend.ast->print(out);
+      
+    }
+
     // ----- IR generation -----
     ProgramNode* ast = frontend.ast;
     IrGenerator ir_generator;
@@ -52,9 +67,6 @@ int main(int argc, char** argv) {
 
     // Derive intermediate file names from output executable basename
     std::string base = output_exe;
-    size_t lastdot = base.find_last_of('.');
-    if (lastdot != std::string::npos)
-        base = base.substr(0, lastdot);
     std::string ssa_file = base + ".ssa";
     std::string asm_file = base + ".s";
     std::string obj_file = base + ".o";
@@ -63,8 +75,8 @@ int main(int argc, char** argv) {
     {
         std::ofstream out(ssa_file);
         if (!out) {
-            std::cerr << "Error: cannot write to " << ssa_file << '\n';
-            return 1;
+            std::cerr << ": Fatal: cannotnot write to " << ssa_file << '\n';
+            return 4;
         }
         out << qbe_ir;
     }
@@ -72,21 +84,21 @@ int main(int argc, char** argv) {
     // 1. QBE: .ssa → .s (assembly)
     std::string qbe_cmd = "deps/qbe/qbe -o " + asm_file + " " + ssa_file;
     if (run_command(qbe_cmd, verbose) != 0) {
-        std::cerr << "QBE compilation failed.\n";
+        std::cerr << "Fatal: QBE compilation failed.\n";
         return 4;
     }
 
     // 2. Assembler: .s → .o
     std::string as_cmd = "cc -c " + asm_file + " -o " + obj_file;
     if (run_command(as_cmd, verbose) != 0) {
-        std::cerr << "Assembly failed.\n";
+        std::cerr << "Fatal: Assembly failed.\n";
         return 4;
     }
 
     // 3. Link with runtime and Boehm GC → final executable
     std::string link_cmd = "cc " + obj_file + " runtime.o -Ldeps/bdwgc -lgc -lpthread -o " + output_exe;
     if (run_command(link_cmd, verbose) != 0) {
-        std::cerr << "Linking failed.\n";
+        std::cerr << "Fatal: Linking failed.\n";
         return 4;
     }
 

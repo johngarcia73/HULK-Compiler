@@ -1,0 +1,13 @@
+data $string_literal_pointer0 = align 16 { w 13, b "Hello, World!", b 0}
+
+
+export function w $main() {
+@start
+    #Initialize GC
+    call $_hulk_gc_init()
+    #Handle print function call
+    %string_literal_pointer0 = l copy $string_literal_pointer0
+    %print_arg_str1 = l call $_l_to_string(l %string_literal_pointer0,w 3)
+    %print_result1 = l call $_print(l %print_arg_str1)
+    ret 0
+}
