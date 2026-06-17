@@ -35,7 +35,8 @@ obj/
 out/
 .hulk_cache/
 #Test Results folder
-/tests/integration_tests/results/
+
+tests/integration_tests/results/
 # IDEs and Editors
 .github/
 .vscode/
