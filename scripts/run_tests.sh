@@ -11,8 +11,8 @@ STUDENT_REPO="${1:?Usage: run_tests.sh <student_repo_path> <tests_dir>}"
 TESTS_DIR="${2:?Usage: run_tests.sh <student_repo_path> <tests_dir>}"
 HULK="$STUDENT_REPO/hulk"
 
-mkdir -p "$TESTS_DIR/result"
-RESULTS_DIR=$(realpath "$TESTS_DIR/result")
+mkdir -p "$TESTS_DIR/results"
+RESULTS_DIR=$(realpath "$TESTS_DIR/results")
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
