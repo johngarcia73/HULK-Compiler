@@ -1328,11 +1328,26 @@ Type* TypeInferenceVisitor::visit(MemberAccessNode& node) {
     Type* baseType = node.base ? coerceUnknown(node.base->accept(*this)) : UnknownType::instance();
     const RegisteredAttribute* attribute = typeRegistry.findDeclaredAttribute(baseType, node.member);
     if (attribute) {
-        if (!currentMethod || currentOwnerTypeName != attribute->ownerTypeName) {
+        bool canAccess = false;
+        if (currentMethod) {
+            // If current method belongs to the same type which declared the attribute
+            if (currentOwnerTypeName == attribute->ownerTypeName) {
+                canAccess = true;
+            } else {
+                // Vrify if currentOwnerTypeName is subtype of attribute->ownerTypeName (Protected approach)
+                Type* currentType = typeRegistry.resolveTypeName(currentOwnerTypeName);
+                Type* ownerType = typeRegistry.resolveTypeName(attribute->ownerTypeName);
+                if (currentType && ownerType && typeRegistry.conforms(currentType, ownerType)) {
+                    canAccess = true;
+                }
+            }
+        }
+        if (!canAccess) {
             error(
                 SemanticPhase::Inference,
                 node,
-                "Attribute '" + node.member + "' is private to type '" + attribute->ownerTypeName + "'.");
+                "Attribute '" + node.member + "' is private to type '" + attribute->ownerTypeName + "'.",
+                {"Access from type '" + currentOwnerTypeName + "' is not allowed."});
         }
         node.type = coerceUnknown(attribute->type);
         return node.type;
