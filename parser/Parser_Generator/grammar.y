@@ -8,9 +8,9 @@
 %token IF ELIF ELSE
 %token WHILE FOR
 %token TRUE FALSE
-%token PLUS MINUS STAR SLASH MODULE
+%token PLUS MINUS STAR SLASH MODULE POWER
 %token NOT AND OR
-%token CONCAT
+%token CONCAT CONCAT_SPACE
 %token LESS_THAN GREATER_THAN LESS_EQUALS GREATER_EQUALS EQUALITY NOT_EQUAL
 %token NUMBER
 %token NUMBER_TYPE
@@ -31,9 +31,10 @@
 %left OR
 %left AND
 %nonassoc EQUALITY NOT_EQUAL LESS_THAN GREATER_THAN LESS_EQUALS GREATER_EQUALS IS AS
-%left CONCAT
+%left CONCAT CONCAT_SPACE
 %left PLUS MINUS
 %left STAR SLASH MODULE
+%right POWER
 %right NOT
 %nonassoc ELSE ELIF
 
@@ -209,15 +210,19 @@ relational : concatenation
 
 concatenation : additive
               | concatenation CONCAT additive
-
+              | concatenation CONCAT_SPACE additive
+              
 additive : multiplicative
          | additive PLUS multiplicative
          | additive MINUS multiplicative
 
-multiplicative : unary
-               | multiplicative STAR unary
-               | multiplicative SLASH unary
-               | multiplicative MODULE unary
+multiplicative : powered
+               | multiplicative STAR powered
+               | multiplicative SLASH powered
+               | multiplicative MODULE powered
+
+powered : unary
+        | unary POWER powered 
 
 unary : MINUS unary
       | PLUS unary

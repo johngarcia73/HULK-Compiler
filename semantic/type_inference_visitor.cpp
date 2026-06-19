@@ -1087,7 +1087,7 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
     Type* left = node.left ? coerceUnknown(node.left->accept(*this)) : UnknownType::instance();
     Type* right = node.right ? coerceUnknown(node.right->accept(*this)) : UnknownType::instance();
 
-    if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/" || node.op == "%") {
+    if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/" || node.op == "%" || node.op == "^") {
         refineUnknownExpression(node.left, NumberType::instance());
         refineUnknownExpression(node.right, NumberType::instance());
         left = node.left ? coerceUnknown(node.left->accept(*this)) : UnknownType::instance();
@@ -1162,10 +1162,17 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
         return node.type;
     }
 
-    if (node.op == "@") {
+    if (node.op == "@" || node.op == "@@") {
         auto is_concat_operand = [](Type* type) {
             return type->equals(StringType::instance()) || isNumberType(type);
         };
+
+        // Refine unknown types to String to improve inference
+        refineUnknownExpression(node.left, StringType::instance(), false);
+        refineUnknownExpression(node.right, StringType::instance(), false);
+
+        Type* left = node.left ? coerceUnknown(node.left->accept(*this)) : UnknownType::instance();
+        Type* right = node.right ? coerceUnknown(node.right->accept(*this)) : UnknownType::instance();
 
         if (left->equals(UnknownType::instance()) || right->equals(UnknownType::instance())) {
             node.type = UnknownType::instance();
@@ -1176,7 +1183,7 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
             error(
                 SemanticPhase::Inference,
                 node,
-                "Operator '@' requires String or Number operands.",
+                "Operator '" + node.op + "' requires String or Number operands.",
                 {"Left operand: " + left->toString(), "Right operand: " + right->toString()});
         }
         node.type = StringType::instance();

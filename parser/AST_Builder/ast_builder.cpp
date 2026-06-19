@@ -754,20 +754,25 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     if (match("concatenation", {"concatenation", "CONCAT", "additive"})) {
         BIN_OP("@");
     }
+    if (match("concatenation", {"concatenation", "CONCAT_SPACE", "additive"})) {
+        BIN_OP("@@");
+    }
     if (match("additive", {"additive", "PLUS", "multiplicative"})) {
         BIN_OP("+");
     }
     if (match("additive", {"additive", "MINUS", "multiplicative"})) {
         BIN_OP("-");
     }
-    if (match("multiplicative", {"multiplicative", "STAR", "unary"})) {
-        BIN_OP("*");
+    
+    if (match("multiplicative", {"multiplicative", "STAR", "powered"})) { BIN_OP("*"); }
+    if (match("multiplicative", {"multiplicative", "SLASH", "powered"})) { BIN_OP("/"); }
+    if (match("multiplicative", {"multiplicative", "MODULE", "powered"})) { BIN_OP("%"); }
+    if (match("multiplicative", {"powered"})) { PASS(); }
+    if (match("powered", {"unary", "POWER", "powered"})) {
+        BIN_OP("^");
     }
-    if (match("multiplicative", {"multiplicative", "SLASH", "unary"})) {
-        BIN_OP("/");
-    }
-    if (match("multiplicative", {"multiplicative", "MODULE", "unary"})) {
-        BIN_OP("%");
+    if (match("powered", {"unary"})) {
+        PASS();
     }
     if (match("unary", {"MINUS", "unary"})) {
         UNARY_OP("-");

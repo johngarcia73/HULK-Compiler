@@ -9,6 +9,7 @@ enum class TokenType : int {
     TOKEN_FUNCTION = 0,
     TOKEN_TYPE,
     TOKEN_PROTOCOL,
+    TOKEN_CONCAT_SPACE,
     TOKEN_INHERITS,
     TOKEN_EXTENDS,
     TOKEN_NEW,
@@ -85,6 +86,7 @@ struct RegexToken {
 // Convert TokenType to string (for mapping to grammar symbols)
 inline std::string token_type_to_string(TokenType t) {
     switch (t) {
+        case TokenType::TOKEN_CONCAT_SPACE: return "CONCAT_SPACE";
         case TokenType::TOKEN_NUMBER_TYPE:  return "NUMBER_TYPE";
         case TokenType::TOKEN_BOOL_TYPE:    return "BOOL_TYPE";
         case TokenType::TOKEN_STRING_TYPE:  return "STRING_TYPE";
@@ -183,6 +185,7 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_NUMBER,   "[0-9]+|[0-9]+\\.[0-9]+", false },
 
         // Operators and symbols
+        { TokenType::TOKEN_CONCAT_SPACE, "@@", false },
         { TokenType::TOKEN_NOT_EQUAL, "!=", false },
         { TokenType::TOKEN_LESS_EQUALS, "<=", false },
         { TokenType::TOKEN_GREATER_EQUALS, ">=", false },
