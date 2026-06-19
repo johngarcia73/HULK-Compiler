@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <gc.h>
+#include "hashmap.h"
+
 typedef enum{
     HULK_TYPE_PTR=0, //null is included here
     HULK_TYPE_NUM=1,
@@ -21,6 +23,78 @@ void* _hulk_alloc(size_t size) {
     //printf("DEBUG: Allocated %zu bytes on address %p \n", size, address);
     return address;
 }
+//################# INHERITANCE RELATED FUNCTIONS #################
+
+// Global hashmaps:
+//   inheritance_map: key = long (child class id),  value = long* (pointer to parent class id)
+//   vtable_map:      key = long (class id),         value = struct hashmap_s* (per-class method map)
+// Each per-class method map: key = long (method id), value = void* (function pointer)
+
+static struct hashmap_s inheritance_map;
+static struct hashmap_s vtable_map;
+
+void _initialize_vtables(){
+    hashmap_create(64, &inheritance_map);
+    hashmap_create(64, &vtable_map);
+}
+
+void _register_inheritance(long child_class, long base_class){
+    // Heap-allocate both key and value so they outlive this call
+    // (hashmap_put stores the key pointer, not a copy)
+    long *key_ptr = (long *)malloc(sizeof(long));
+    *key_ptr = child_class;
+    long *parent_ptr = (long *)malloc(sizeof(long));
+    *parent_ptr = base_class;
+    hashmap_put(&inheritance_map, key_ptr, sizeof(long), parent_ptr);
+}
+
+void _register_method(long class_id, long method_id, void *method_ptr){
+    // Look up the per-class method map for this class
+    struct hashmap_s *method_map = (struct hashmap_s *)hashmap_get(&vtable_map, &class_id, sizeof(long));
+
+    if (method_map == NULL) {
+        // First method registered for this class — create a new method hashmap
+        method_map = (struct hashmap_s *)malloc(sizeof(struct hashmap_s));
+        hashmap_create(16, method_map);
+
+        long *class_key = (long *)malloc(sizeof(long));
+        *class_key = class_id;
+        hashmap_put(&vtable_map, class_key, sizeof(long), method_map);
+    }
+
+    // Store the function pointer as the value
+    long *method_key = (long *)malloc(sizeof(long));
+    *method_key = method_id;
+    hashmap_put(method_map, method_key, sizeof(long), method_ptr);
+}
+
+void *_get_virtual_method(long class_id, long method_id){
+    long current_id = class_id;
+
+    while (1) {
+        // Try to find the method in the current class's method map
+        struct hashmap_s *method_map = (struct hashmap_s *)hashmap_get(&vtable_map, &current_id, sizeof(long));
+
+        if (method_map != NULL) {
+            void *fn = hashmap_get(method_map, &method_id, sizeof(long));
+            if (fn != NULL) {
+                return fn;
+            }
+        }
+
+        // Method not found here — walk up the inheritance chain
+        long *parent_ptr = (long *)hashmap_get(&inheritance_map, &current_id, sizeof(long));
+
+        if (parent_ptr == NULL) {
+            // No parent class — method not found anywhere in the chain
+            return NULL;
+        }
+
+        current_id = *parent_ptr;
+    }
+}
+
+
 //################ BUILT-IN LENGUAJE FUNCTIONS #####################
 // Assuming length is a 32-bit word (uint32_t)
 uint32_t _string_compair(const char *a, const char *b) {
@@ -121,3 +195,5 @@ char* _s_to_string(float value, TypeFlag type) {
     int len = snprintf(buffer, sizeof(buffer), "%g", (double)value);
     return _create_hulk_string(buffer, len);
 }
+
+

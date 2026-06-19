@@ -22,7 +22,8 @@ private:
     StringPool stringPool;
     StringBuilder dataBuilder;
     StringBuilder codeBuilder;
-    NameGenerator nameGenerator;
+    StringBuilder programBuilder;
+    NameManager nameManager;
     std::string nameForCurrentExpression;
     std::string typeForCurrentExpression;
     ScopeTable scopeTable;

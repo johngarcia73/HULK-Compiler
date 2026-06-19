@@ -159,8 +159,6 @@ BinaryOpNode::BinaryOpNode(std::string op_, ASTNodePtr l, ASTNodePtr r)
     : op(op_), left(l), right(r) {}
 
 BinaryOpNode::~BinaryOpNode() {
-    delete left;
-    delete right;
 }
 
 void BinaryOpNode::print(std::ostream &o, int indent_n) const {
@@ -183,7 +181,6 @@ UnaryOpNode::UnaryOpNode(std::string op_, ASTNodePtr operand_)
     : op(op_), operand(operand_) {}
 
 UnaryOpNode::~UnaryOpNode() {
-    delete operand;
 }
 
 void UnaryOpNode::print(std::ostream &o, int indent_n) const {
@@ -204,7 +201,6 @@ Type* UnaryOpNode::accept(Visitor& v) {
 ExprStmtNode::ExprStmtNode(ASTNodePtr e) : expr(e) {}
 
 ExprStmtNode::~ExprStmtNode() {
-    delete expr;
 }
 
 void ExprStmtNode::print(std::ostream &o, int indent_n) const {
@@ -225,7 +221,6 @@ Type* ExprStmtNode::accept(Visitor& v) {
 BlockNode::BlockNode(std::vector<ASTNodePtr> s) : stmts(std::move(s)) {}
 
 BlockNode::~BlockNode() {
-    for (auto p : stmts) delete p;
 }
 
 void BlockNode::print(std::ostream &o, int indent_n) const {
@@ -247,8 +242,6 @@ ProgramNode::ProgramNode(std::vector<ASTNodePtr> d, std::vector<ASTNodePtr> s)
     : decls(std::move(d)), stmts(std::move(s)) {}
 
 ProgramNode::~ProgramNode() {
-    for (auto p : decls) delete p;
-    for (auto p : stmts) delete p;
 }
 
 void ProgramNode::test() const {
@@ -350,8 +343,6 @@ FunctionDeclNode::FunctionDeclNode(
       inferredFunctionType(nullptr) {}
       
 FunctionDeclNode::~FunctionDeclNode() {
-    delete body;
-    delete exprBody;
 }
 
 
@@ -434,8 +425,6 @@ LetNode::LetNode(
       body(b) {}
 
 LetNode::~LetNode() {
-    delete init;
-    delete body;
 }
 
 void LetNode::print(std::ostream& o, int indent_n) const {
@@ -466,9 +455,6 @@ IfNode::IfNode(ASTNodePtr c, ASTNodePtr t, ASTNodePtr e)
     : condition(c), then_branch(t), else_branch(e) {}
 
 IfNode::~IfNode() {
-    delete condition;
-    delete then_branch;
-    delete else_branch;
 }
 
 void IfNode::print(std::ostream& o, int indent_n) const {
@@ -499,8 +485,6 @@ FunctionCallNode::FunctionCallNode(std::string n, std::vector<ASTNodePtr> a, AST
     : name(std::move(n)), receiver(r), args(std::move(a)) {}
 
 FunctionCallNode::~FunctionCallNode() {
-    delete receiver;
-    for (auto* a : args) delete a;
 }
 
 void FunctionCallNode::print(std::ostream& o, int indent_n) const {
@@ -548,7 +532,6 @@ LetBindingNode::LetBindingNode(
       init(i) {}
 
 LetBindingNode::~LetBindingNode() {
-    delete init;
 }
 
 void LetBindingNode::print(std::ostream& o, int indent_n) const {
@@ -631,8 +614,6 @@ AssignmentNode::AssignmentNode(ASTNodePtr t, ASTNodePtr v)
     : target(t), value(v) {}
 
 AssignmentNode::~AssignmentNode() {
-    delete target;
-    delete value;
 }
 
 void AssignmentNode::print(std::ostream& o, int indent_n) const {
@@ -657,7 +638,6 @@ MemberAccessNode::MemberAccessNode(ASTNodePtr b, std::string m)
     : base(b), member(std::move(m)) {}
 
 MemberAccessNode::~MemberAccessNode() {
-    delete base;
 }
 
 void MemberAccessNode::print(std::ostream& o, int indent_n) const {
@@ -679,7 +659,6 @@ NewNode::NewNode(std::string t, std::vector<ASTNodePtr> a)
     : typeName(std::move(t)), args(std::move(a)) {}
 
 NewNode::~NewNode() {
-    for (auto* a : args) delete a;
 }
 
 void NewNode::print(std::ostream& o, int indent_n) const {
@@ -714,7 +693,6 @@ LambdaNode::LambdaNode(
       body(b) {}
 
 LambdaNode::~LambdaNode() {
-    delete body;
 }
 
 void LambdaNode::print(std::ostream& o, int indent_n) const {
@@ -744,7 +722,6 @@ VectorLiteralNode::VectorLiteralNode(std::vector<ASTNodePtr> e)
     : elements(std::move(e)) {}
 
 VectorLiteralNode::~VectorLiteralNode() {
-    for (auto* element : elements) delete element;
 }
 
 void VectorLiteralNode::print(std::ostream& o, int indent_n) const {
@@ -771,8 +748,6 @@ VectorComprehensionNode::VectorComprehensionNode(ASTNodePtr expr, std::string it
     : expression(expr), iterator(std::move(it)), iterable(iter) {}
 
 VectorComprehensionNode::~VectorComprehensionNode() {
-    delete expression;
-    delete iterable;
 }
 
 void VectorComprehensionNode::print(std::ostream& o, int indent_n) const {
@@ -797,8 +772,6 @@ IndexAccessNode::IndexAccessNode(ASTNodePtr b, ASTNodePtr i)
     : base(b), index(i) {}
 
 IndexAccessNode::~IndexAccessNode() {
-    delete base;
-    delete index;
 }
 
 void IndexAccessNode::print(std::ostream& o, int indent_n) const {
@@ -823,8 +796,6 @@ WhileNode::WhileNode(ASTNodePtr c, ASTNodePtr b)
     : condition(c), body(b) {}
 
 WhileNode::~WhileNode() {
-    delete condition;
-    delete body;
 }
 
 void WhileNode::print(std::ostream& o, int indent_n) const {
@@ -849,8 +820,6 @@ ForNode::ForNode(std::string it, ASTNodePtr iter, ASTNodePtr b)
     : iterator(std::move(it)), iterable(iter), body(b) {}
 
 ForNode::~ForNode() {
-    delete iterable;
-    delete body;
 }
 
 void ForNode::print(std::ostream& o, int indent_n) const {
@@ -884,7 +853,6 @@ AttributeDeclNode::AttributeDeclNode(
       init(i) {}
 
 AttributeDeclNode::~AttributeDeclNode() {
-    delete init;
 }
 
 void AttributeDeclNode::print(std::ostream& o, int indent_n) const {
@@ -928,8 +896,6 @@ TypeDeclNode::TypeDeclNode(
       members(std::move(m)) {}
 
 TypeDeclNode::~TypeDeclNode() {
-    for (auto* pa : parentArgs) delete pa;
-    for (auto* m : members) delete m;
 }
 
 void TypeDeclNode::print(std::ostream& o, int indent_n) const {
@@ -982,7 +948,6 @@ ProtocolDeclNode::ProtocolDeclNode(std::string n, std::string ep, std::vector<AS
     : name(std::move(n)), extendedProtocol(std::move(ep)), methods(std::move(m)) {}
 
 ProtocolDeclNode::~ProtocolDeclNode() {
-    for (auto* m : methods) delete m;
 }
 
 void ProtocolDeclNode::print(std::ostream& o, int indent_n) const {
@@ -1005,7 +970,7 @@ Type* ProtocolDeclNode::accept(Visitor& v) {
 
 
 ReturnNode::ReturnNode(ASTNodePtr e) : expr(e) {}
-ReturnNode::~ReturnNode() { delete expr; }
+ReturnNode::~ReturnNode() {}
 void ReturnNode::print(std::ostream& o, int indent_n) const {
     indent(o, indent_n);
     o << "Return";

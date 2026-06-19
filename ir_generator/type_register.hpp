@@ -1,87 +1,94 @@
 #pragma once
 #include <string>
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <utility>
 #include <memory>
+#include <stdexcept>
 #include "type_utils.hpp"
 #include "../parser/AST_Builder/ast_node.hpp"
-
-// ====================== TypeInfo ======================
-class TypeInfo {
-public:
-    // Pointer to the AST node that defined this type.
-    // Assumed to stay alive as long as this TypeInfo exists.
-    const TypeDeclNode* declaration = nullptr;
-
-    // field name -> (word_size_string, byte_offset)
-    std::map<std::string, std::pair<std::string, int>> fieldInfo;
-
-    int totalSize = 0;   // total size in bytes
-
-    TypeInfo() = default;
-
-    /// Returns byte offset of the given field, or -1 if not found.
-    int getOffset(const std::string& fieldName) const {
-        auto it = fieldInfo.find(fieldName);
-        if (it != fieldInfo.end())
-            return it->second.second;
-        return -1;
-    }
-
-    /// Returns word size string ("w" or "l") for the given field.
-    std::string getWordSize(const std::string& fieldName) const {
-        auto it = fieldInfo.find(fieldName);
-        if (it != fieldInfo.end())
-            return it->second.first;
-        return "";
-    }
-};
 
 // ====================== TypeRegister ======================
 class TypeRegister {
 public:
-    /// Returns the TypeInfo for the named type (throws std::out_of_range if missing).
-    TypeInfo& getInfo(const std::string& name) {
-        return typeInfos_.at(name);
+    TypeDeclNode* getDeclaration(std::string typeName){
+        return  declarations.at(typeName);
     }
+    //Computes the layout if not already computed
+    void computeLayout(std::string typeName)
+    {
+      //Check if found in computed layouts
+      //if it's founded return 
+      if(computedLayout[typeName]) return;
 
-    bool hasInfo(const std::string& name) const {
-        return typeInfos_.find(name) != typeInfos_.end();
-    }
-
-    /// Registers a new type from a TypeDeclNode.
-    /// The declaration must stay valid throughout the compiler's lifetime.
-    /// Parent type (if any) must already be registered.
-    void registerFromDeclaration(TypeDeclNode* decl) {
-        TypeInfo info;
-          // store pointer, no data copied
-
-        // 1. Start offset after parent size
-        int currentOffset = 0;
+      int size;
+      std::string wordSize;
+      if(typeName=="Object"){
         
-        /* This can be usefull later, but righ now, is buggy.
-        if (!decl->parentType.empty()) {
-            TypeInfo& parent = getInfo(decl->parentType);
-            currentOffset = parent.totalSize;
-        } */
+        size= TypeUtils::currentTarget.PointerSize;
+        wordSize = TypeUtils::currentTarget.PointerType;
+        //Not need to care about other invariants in this case
+        
+        return;
+      }
 
-        // 2. Process own attribute declarations
-        for (auto memberPtr : decl->members) {
-            auto attr = dynamic_cast<AttributeDeclNode*>(memberPtr);
-            if (!attr) continue;   // skip non-field members
+      //Found the type declaration for typeName on declartions and store in decl
+      TypeDeclNode* decl = declarations.at(typeName);
+      computeLayout(decl->parentType);
+      //Get the size of the parent layout and store it on currentOffset
+      int currentOffset = decl->parentType.empty() ? 0 : sizes[decl->parentType];
+      for(auto member: decl->members)
+      {
+        auto attr=dynamic_cast<AttributeDeclNode*>(member);
+        if(attr){
+            currentOffset+=TypeUtils::getByteSize(attr->type);
             
-            int fieldSize = TypeUtils::getByteSize(attr->type);
-            std::string fieldWordSize= TypeUtils::toQbeType(attr->type);
-            
-            info.fieldInfo[attr->name] = std::make_pair(fieldWordSize, currentOffset);
-            currentOffset += fieldSize;
+            //Add attr->name,currentOffset to the map with the key typeName on offsets
+            offsets[typeName][attr->name] = currentOffset;
+            wordSize = TypeUtils::toQbeType(decl->type);
+            //Add attr->name,wordSize to the map on with key typeName on wordSizes
+            wordSizes[typeName][attr->name] = wordSize;
         }
-        info.declaration = decl; 
-        info.totalSize = currentOffset;
-        typeInfos_[decl->name] = std::move(info);
+        
+      }
+      //Add typeName,currentOffset to sizes.
+      sizes[typeName] = currentOffset;
+      //Add typeName,true to computedLayout
+      computedLayout[typeName] = true;
+    
+    }
+    int totalSize(std::string typeName){
+      computeLayout(typeName);
+      //Found on sizes for key typeName;
+      return sizes[typeName];
+    } 
+    // Returns byte offset of the given field, or -1 if not found.
+    int getOffset(std::string typeName,std::string fieldName)
+    {
+        computeLayout(typeName);
+        //Found on offsets with the key the typeName and then with the key fieldName
+        auto& offMap = offsets[typeName];
+        auto it = offMap.find(fieldName);
+        return (it != offMap.end()) ? it->second : -1;
+    }
+
+    /// Returns word size string 
+    std::string getWordSize(std::string typeName,std::string& fieldName)
+    {
+        computeLayout(typeName);
+        //Found on wordSizes with the key the typeName and then with the key fieldName
+        return wordSizes[typeName][fieldName];
+    }
+    void registerFromDeclaration(TypeDeclNode* decl) {
+       //Adds the decl to  declarations, decl->name holds the type name wich will
+       //be used as key.  
+       declarations[decl->name] = decl;
     }
 
 private:
-    std::map<std::string, TypeInfo> typeInfos_;
+    std::unordered_map<std::string, TypeDeclNode*> declarations;
+    std::unordered_map<std::string, int> sizes;
+    std::unordered_map<std::string,std::unordered_map<std::string,int>> offsets; 
+    std::unordered_map<std::string,std::unordered_map<std::string,std::string>> wordSizes; 
+    std::unordered_map<std::string,bool> computedLayout;
 };

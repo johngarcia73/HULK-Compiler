@@ -14,17 +14,51 @@ std::string IrGenerator::generate(ASTNodePtr node) {
 // ############ PROGRAM ################################
 Type* IrGenerator::visit(ProgramNode& node) { 
     //Visit statemtns
+    dataBuilder.addLine("data $Object = align {} {{b 0}}",targetInfo.PointerSize);
+    
     for (auto declaration: node.decls)
     {
         declaration->accept(*this);
     }
-
-    codeBuilder
-    .addLine("export function w $main() {{")
+    codeBuilder.addLine("export function w $main() {{")
     .addLine("@start")
     .indent()
     .addLine("#Initialize GC")
-    .addLine("call $_hulk_gc_init()");
+    .addLine("call $_hulk_gc_init()")
+    .addLine("call $_initialize_vtables()")
+    .addLine("#Register class methods on VTABLES");
+
+    // Emit all vtable registrations here, inside $main, where it is valid IR.
+    for (auto declaration : node.decls)
+    {
+        auto typeDecl = dynamic_cast<TypeDeclNode*>(declaration);
+        if (!typeDecl) continue;
+
+        // Register inheritance chain.
+        codeBuilder.addLine("call $_register_inheritance(l ${},l ${})",
+                            typeDecl->name,
+                            typeDecl->parentType);
+
+        // Register each method on the vtable.
+        for (auto member : typeDecl->members)
+        {
+            auto method = dynamic_cast<FunctionDeclNode*>(member);
+            if (!method || !method->isMethod) continue;
+            // Ensure the method-name symbol exists in the data section.
+            if (!nameManager.exists(method->name)) {
+                nameManager.add(method->name);
+                dataBuilder.addLine("data ${} = align {} {{b 0}}", method->name, targetInfo.PointerSize);
+            }
+            // Compute the lowered function name (same rule used in FunctionDeclNode visit).
+            std::string loweredName = method->ownerTypeName + "_" + method->name;
+            codeBuilder.addLine("call $_register_method(l ${},l ${},l $_{})",
+                                method->ownerTypeName,
+                                method->name,
+                                loweredName
+                            );
+        }
+    }
+
     for (auto statment : node.stmts)
     {
         statment->accept(*this);
@@ -48,7 +82,7 @@ Type* IrGenerator::visit(BlockNode& node) {
 
     std::string lastExpressionName = nameForCurrentExpression;
 
-    nameForCurrentExpression = nameGenerator.generateName("block_result");
+    nameForCurrentExpression = nameManager.generateName("block_result");
     typeForCurrentExpression = TypeUtils::toQbeType(node.type);
     codeBuilder.addLine("%{} = {} copy %{}",
                         nameForCurrentExpression,
@@ -66,7 +100,7 @@ Type* IrGenerator::visit(LetNode& node) {
 
    //Map the hulk variable name to a qbe register so it can be accesed later
 
-   std::string registerName = nameGenerator.generateName("_"+node.name);
+   std::string registerName = nameManager.generateName("_"+node.name);
 
    scopeTable.defineVariable(node.name,registerName);
 
@@ -83,7 +117,7 @@ Type* IrGenerator::visit(LetNode& node) {
    std::string bodyResult = nameForCurrentExpression;
    typeForCurrentExpression = TypeUtils::toQbeType(node.type);
 
-   nameForCurrentExpression = nameGenerator.generateName("let_in_result");
+   nameForCurrentExpression = nameManager.generateName("let_in_result");
    
    codeBuilder.addLine("%{} = {} copy %{}", 
                     nameForCurrentExpression,
@@ -95,13 +129,13 @@ Type* IrGenerator::visit(LetNode& node) {
 }
 Type* IrGenerator::visit(IfNode& node) {
 
-    std::string ifResult = nameGenerator.generateName("if_result");
+    std::string ifResult = nameManager.generateName("if_result");
 
     node.condition->accept(*this);
     
-    std::string thenLabel = nameGenerator.generateName("then");
-    std::string elseBranchLabel = nameGenerator.generateName("else");
-    std::string mergeLabel = nameGenerator.generateName("merge");
+    std::string thenLabel = nameManager.generateName("then");
+    std::string elseBranchLabel = nameManager.generateName("else");
+    std::string mergeLabel = nameManager.generateName("merge");
 
 
     codeBuilder.addLine("jnz %{},@{},@{}",nameForCurrentExpression,thenLabel,elseBranchLabel);
@@ -150,15 +184,10 @@ Type* IrGenerator::visit(IfNode& node) {
     typeForCurrentExpression = TypeUtils::toQbeType(node.type);
     return nullptr;
 }
-Type* IrGenerator::visit(FunctionCallNode& node) 
+Type* IrGenerator::visit(FunctionCallNode &node) 
 {
-    if (node.receiver) {
-        auto loweredNode = lowering::methodCallToFunctionCallLowering(&node);
-        return loweredNode->accept(*this);
-    }
     if(node.name=="print")
     {
-         //TODO use real type flags based on the actual type
         codeBuilder.addLine("#Handle print function call");
         
         node.args[0]->accept(*this);
@@ -167,7 +196,7 @@ Type* IrGenerator::visit(FunctionCallNode& node)
         std::string argType = typeForCurrentExpression;
         std::string argName = nameForCurrentExpression;
 
-        std::string printArgStr = nameGenerator.generateName("print_arg_str");
+        std::string printArgStr = nameManager.generateName("print_arg_str");
         codeBuilder.addLine("%{} = {} call $_{}_to_string({} %{},w {})",
                             printArgStr,
                             targetInfo.PointerType,
@@ -176,7 +205,7 @@ Type* IrGenerator::visit(FunctionCallNode& node)
                             argName,
                             typeFlag
                             );
-        std::string printResult = nameGenerator.generateName("print_result");
+        std::string printResult = nameManager.generateName("print_result");
         codeBuilder.addLine("%{} = {} call $_print({} %{})",
                             printResult,
                             targetInfo.PointerType,
@@ -193,7 +222,30 @@ Type* IrGenerator::visit(FunctionCallNode& node)
         return nullptr;
     }
     
-     
+    //Note the underscore here to avoid collisions betwen ir code
+    // and hulk code names
+    std::string callTarget = "$_" + node.name;
+    if (node.receiver) {
+        node = *lowering::methodCallToFunctionCallLowering(&node);
+        node.receiver->accept(*this);
+        std::string classId = nameManager.generateName("class_id");
+        codeBuilder.addLine("%{} ={} load{} %{}",
+                                classId,
+                                targetInfo.PointerType,
+                                targetInfo.PointerType,
+                                nameForCurrentExpression
+                            );
+        std::string function_ptr=nameManager.generateName(node.name+"_ptr"); 
+        codeBuilder.addLine("%{} = l call $_get_virtual_method(l %{},l ${})",
+                                    function_ptr,
+                                    classId,
+                                    node.name
+                            );
+
+        callTarget = "%"+function_ptr; 
+        
+    }
+    
     //Evaluate the arguments of the function
     std::vector<std::string> argResultsNames; 
     std::vector<std::string> argResultsTypes;
@@ -204,13 +256,10 @@ Type* IrGenerator::visit(FunctionCallNode& node)
         argResultsTypes.push_back(typeForCurrentExpression);
     }
     
-    std::string callTarget = "_" + node.name;
-
-    nameForCurrentExpression = nameGenerator.generateName("call_result");
+    nameForCurrentExpression = nameManager.generateName("call_result");
     typeForCurrentExpression = TypeUtils::toQbeType(node.type);
-    //Note the underscore here to avoid collisions betwen ir code
-    // and hulk code names
-    codeBuilder.add("%{} = {} call ${}",nameForCurrentExpression,
+    
+    codeBuilder.add("%{} = {} call {}",nameForCurrentExpression,
                                         typeForCurrentExpression,
                                         callTarget);
     codeBuilder.add("(");
@@ -237,7 +286,7 @@ Type* IrGenerator::visit(VariableNode& node) {
     return nullptr;
 }
 Type* IrGenerator::visit(NumberNode& node) { 
-    nameForCurrentExpression = nameGenerator.generateName("num_literal");
+    nameForCurrentExpression = nameManager.generateName("num_literal");
     typeForCurrentExpression = TypeUtils::toQbeType(node.type);
     codeBuilder.addLine("%{} ={} copy {}_{}",
                         nameForCurrentExpression,
@@ -258,7 +307,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
 
     if (node.op == "<") 
     {   
-        nameForCurrentExpression = nameGenerator.generateName("less_than");
+        nameForCurrentExpression = nameManager.generateName("less_than");
         typeForCurrentExpression = "w";
         codeBuilder.addLine("%{} = w clt{} %{}, %{}",
                                          nameForCurrentExpression,
@@ -268,7 +317,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
     } 
     else if (node.op == ">") 
     {
-        nameForCurrentExpression = nameGenerator.generateName("greater_than");
+        nameForCurrentExpression = nameManager.generateName("greater_than");
         typeForCurrentExpression = "w";
         codeBuilder.addLine("%{} = w cgt{} %{}, %{}",
                                          nameForCurrentExpression,
@@ -278,7 +327,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
     } 
     else if (node.op == "<=") 
     {
-        nameForCurrentExpression = nameGenerator.generateName("less_equal");
+        nameForCurrentExpression = nameManager.generateName("less_equal");
         typeForCurrentExpression = "w";
         codeBuilder.addLine("%{} = w cle{} %{}, %{}",
                                          nameForCurrentExpression,
@@ -288,7 +337,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
     } 
     else if (node.op == ">=") 
     {
-        nameForCurrentExpression = nameGenerator.generateName("greater_equal");
+        nameForCurrentExpression = nameManager.generateName("greater_equal");
         typeForCurrentExpression = "w";
         codeBuilder.addLine("%{} = w cge{} %{}, %{}",
                                          nameForCurrentExpression,
@@ -298,7 +347,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
     }
     else if (node.op == "==") 
     {
-        nameForCurrentExpression = nameGenerator.generateName("equals");
+        nameForCurrentExpression = nameManager.generateName("equals");
         typeForCurrentExpression = "w";
         if(node.left->type!=node.right->type)
         {
@@ -326,7 +375,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
     else if (node.op == "@") 
     {   //Add code for conert to string
         int typeFlag = TypeUtils::getRuntimeFlag(node.left->type); 
-        std::string leftStrName = nameGenerator.generateName("left_str");
+        std::string leftStrName = nameManager.generateName("left_str");
         codeBuilder.addLine("%{} = {} call $_{}_to_string({} %{},w {})",
                             leftStrName,
                             targetInfo.PointerType,
@@ -337,7 +386,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
                             );
                             
         typeFlag = TypeUtils::getRuntimeFlag(node.right->type);                     
-        std::string rightStrName = nameGenerator.generateName("right_str");
+        std::string rightStrName = nameManager.generateName("right_str");
         codeBuilder.addLine("%{} = {} call $_{}_to_string({} %{},w {})",
                             rightStrName,
                             targetInfo.PointerType,
@@ -346,7 +395,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
                             rightName,
                             typeFlag
                             );
-        nameForCurrentExpression = nameGenerator.generateName("concat");
+        nameForCurrentExpression = nameManager.generateName("concat");
         typeForCurrentExpression = targetInfo.PointerType;
         codeBuilder.addLine("%{} = {} call $_string_concat({} %{}, {} %{})", 
                             nameForCurrentExpression, 
@@ -358,25 +407,25 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
     } 
     else if (node.op == "+") 
     {
-        nameForCurrentExpression = nameGenerator.generateName("addition");
+        nameForCurrentExpression = nameManager.generateName("addition");
         typeForCurrentExpression = TypeUtils::toQbeType(node.type);
         codeBuilder.addLine("%{} = {} add %{}, %{}", nameForCurrentExpression, typeForCurrentExpression, leftName, rightName);
     } 
     else if (node.op == "-") 
     {
-        nameForCurrentExpression = nameGenerator.generateName("subtraction");
+        nameForCurrentExpression = nameManager.generateName("subtraction");
         typeForCurrentExpression = TypeUtils::toQbeType(node.type);
         codeBuilder.addLine("%{} = {} sub %{}, %{}", nameForCurrentExpression, typeForCurrentExpression, leftName, rightName);
     }
     else if (node.op == "*") 
     { 
-        nameForCurrentExpression = nameGenerator.generateName("multiplication");
+        nameForCurrentExpression = nameManager.generateName("multiplication");
         typeForCurrentExpression = TypeUtils::toQbeType(node.type);
         codeBuilder.addLine("%{} = {} mul %{}, %{}", nameForCurrentExpression, typeForCurrentExpression, leftName, rightName);
     } 
     else if (node.op == "/") 
     {
-        nameForCurrentExpression = nameGenerator.generateName("division");
+        nameForCurrentExpression = nameManager.generateName("division");
         typeForCurrentExpression = TypeUtils::toQbeType(node.type);
         codeBuilder.addLine("%{} = {} div %{}, %{}", nameForCurrentExpression, typeForCurrentExpression, leftName, rightName);
     }
@@ -405,7 +454,7 @@ Type* IrGenerator::visit(StringNode& node) {
  }
 Type* IrGenerator::visit(BoolNode& node) { 
     
-    nameForCurrentExpression = nameGenerator.generateName("bool_literal");
+    nameForCurrentExpression = nameManager.generateName("bool_literal");
     typeForCurrentExpression = TypeUtils::toQbeType(node.type);
     codeBuilder.addLine("%{} = {} copy {}",
                         nameForCurrentExpression,
@@ -426,7 +475,7 @@ Type* IrGenerator::visit(UnaryOpNode& node) {
     std::string operandResult =nameForCurrentExpression;
     typeForCurrentExpression = TypeUtils::toQbeType(node.type);    
     if(node.op=="-"){
-        nameForCurrentExpression = nameGenerator.generateName("negation");
+        nameForCurrentExpression = nameManager.generateName("negation");
         codeBuilder.addLine("%{} = {} sub 0, %{}",
                             nameForCurrentExpression,
                             typeForCurrentExpression,
@@ -457,11 +506,11 @@ Type* IrGenerator::visit(AssignmentNode& node) {
             typeName = memNode->base->type->toString();
         }
 
-        TypeInfo info = typeRegister.getInfo(typeName);
-        int offset = info.getOffset(memNode->member);
-        std::string wordSize = info.getWordSize(memNode->member);
+        
+        int offset = typeRegister.getOffset(typeName,memNode->member);
+        std::string wordSize = typeRegister.getWordSize(typeName,memNode->member);
 
-        std::string fieldPtr = nameGenerator.generateName(baseRegister + "_" + memNode->member);
+        std::string fieldPtr = nameManager.generateName(baseRegister + "_" + memNode->member);
         codeBuilder.addLine("%{} = {} add %{}, {}",
                             fieldPtr,
                             targetInfo.PointerType,
@@ -481,9 +530,9 @@ Type* IrGenerator::visit(AssignmentNode& node) {
     return nullptr;
 }
 Type* IrGenerator::visit(WhileNode& node) {
-    std::string conditionLabel = nameGenerator.generateName("loop_cond");
-    std::string bodyLabel = nameGenerator.generateName("loop_body");
-    std::string endLabel = nameGenerator.generateName("loop_end");
+    std::string conditionLabel = nameManager.generateName("loop_cond");
+    std::string bodyLabel = nameManager.generateName("loop_body");
+    std::string endLabel = nameManager.generateName("loop_end");
     
     //loop_cond
     codeBuilder.addLine("@{}", conditionLabel);
@@ -526,51 +575,82 @@ Type* IrGenerator::visit(ForNode& node) {
     return nullptr;
 }
 Type* IrGenerator::visit(NewNode& node) {
-    TypeInfo info = typeRegister.getInfo(node.typeName);
-    
-    
-    std::string objectRegister = nameGenerator.generateName(node.typeName+"_obj");
+   
+    //Allocate object in memory, with name objectRegister
+    std::string objectRegister = nameManager.generateName(node.typeName+"_obj");
     codeBuilder.addLine("# Initialize and object of type {}", node.typeName);
     codeBuilder.addLine("%{} = {} call $_hulk_alloc(l {})",
                         objectRegister,
                         targetInfo.PointerType,
-                        info.totalSize);
-    scopeTable.enterScope();
-    codeBuilder.addLine("#Evaluate constructor args expressions of type{}",node.typeName);
-    for(int i=0; i<node.args.size(); i++)
+                        typeRegister.totalSize(node.typeName)
+                    );
+    //Set the type name on the first offset of the object
+    codeBuilder.addLine("# Set type name on the first offset for the object");
+    codeBuilder.addLine("store{} ${}, %{}",
+                        targetInfo.PointerType,
+                        node.typeName,
+                        objectRegister
+                        );  
+    //Initialize offsets recursivly until we reach to the Object type
+    auto constructorArgs =node.args;
+    auto currentType = node.typeName;
+    while(currentType!="Object")
     {
-       node.args[i]->accept(*this); //Value of argument
-       scopeTable.defineVariable(
-                    info.declaration->ctorParams[i],
-                    nameForCurrentExpression);
+        //Evaluate constructor arguments on a same scope 
+        scopeTable.enterScope();
+        codeBuilder.addLine("#Evaluate constructor args expressions of type{}",currentType);
 
-    }
+        std::vector<std::string> evaluatedArgsNames; 
+        for(int i=0; constructorArgs.size(); i++)
+        {
+            constructorArgs[i]->accept(*this); //Value of argument
+            evaluatedArgsNames.push_back(nameForCurrentExpression);
+        }
 
-    for(auto member: info.declaration->members){
-        //if member is an attribute decleration we need to initialize it
-        auto attr = dynamic_cast<AttributeDeclNode*>(member);
-        if(!attr) continue;
+        for (int i=0;i<evaluatedArgsNames.size();i++)
+        {
+            scopeTable.defineVariable(
+                        typeRegister.getDeclaration(node.typeName)->ctorParams[i],
+                        evaluatedArgsNames[i]
+            );
+        }
+        //Initialize attribues with that values
+        for(auto member: typeRegister.getDeclaration(node.typeName)->members){
+            //if member is an attribute decleration we need to initialize it
+            auto attr = dynamic_cast<AttributeDeclNode*>(member);
+            if(!attr) continue;
 
-        int offset = info.getOffset(attr->name);
-        std::string wordSize = info.getWordSize(attr->name);
-        codeBuilder.addLine("# Initialize field {}", attr->name);
-        std::string fieldRegister = nameGenerator.generateName(node.typeName+"_obj_"+attr->name);
+            int offset = typeRegister.getOffset(currentType,attr->name);
+            std::string wordSize = typeRegister.getWordSize(currentType,attr->name);
+            codeBuilder.addLine("# Initialize field {}", attr->name);
+            std::string fieldRegister = nameManager.generateName(node.typeName+"_obj_"+attr->name);
         
-        codeBuilder.addLine("%{} = {} add %{}, {}",
-                            fieldRegister,
-                            targetInfo.PointerType,
-                            objectRegister,
-                            offset);
-        attr->init->accept(*this);
-        codeBuilder.addLine("store{} %{}, %{}",
-                            wordSize,
-                            nameForCurrentExpression,
-                            fieldRegister
-                        );
+            codeBuilder.addLine("%{} = {} add %{}, {}",
+                                fieldRegister,
+                                targetInfo.PointerType,
+                                objectRegister,
+                                offset);
+            attr->init->accept(*this);
+            codeBuilder.addLine("store{} %{}, %{}",
+                                wordSize,
+                                nameForCurrentExpression,
+                                fieldRegister
+                            );
+        }
+
+        //get parent info and repeat the process
+        constructorArgs = typeRegister.getDeclaration(currentType)->parentArgs; 
+        currentType = typeRegister.getDeclaration(currentType)->parentType;
+           
     }
-    scopeTable.exitScope();
+    currentType = node.typeName;
+    while(currentType!="Object")
+    {
+        scopeTable.exitScope();
+        currentType = typeRegister.getDeclaration(currentType)->parentType;
+    }
     nameForCurrentExpression = objectRegister;
-    typeForCurrentExpression = TypeUtils::toQbeType(node.type);
+    typeForCurrentExpression = targetInfo.PointerType;
     return nullptr;
 }
 Type* IrGenerator::visit(MemberAccessNode& node) {
@@ -579,22 +659,21 @@ Type* IrGenerator::visit(MemberAccessNode& node) {
         typeName = node.base->type->toString();
     }
     
-    TypeInfo info = typeRegister.getInfo(typeName);
-
+    
     node.base->accept(*this);
-    std::string fieldPointer = nameGenerator.generateName(
+    std::string fieldPointer = nameManager.generateName(
                                     nameForCurrentExpression+"_"+node.member);
     codeBuilder.addLine("%{} = {} add %{}, {}",
                             fieldPointer,
                             typeForCurrentExpression,
                             nameForCurrentExpression,
-                            info.getOffset(node.member)
+                            typeRegister.getOffset(typeName,node.member)
                         );
-    std::string fieldValue = nameGenerator.generateName("field_value");
+    std::string fieldValue = nameManager.generateName("field_value");
     codeBuilder.addLine("%{} = {} load{} %{}",
                             fieldValue,
-                            info.getWordSize(node.member),
-                            info.getWordSize(node.member),
+                            typeRegister.getWordSize(typeName,node.member),
+                            typeRegister.getWordSize(typeName,node.member),
                             fieldPointer
                         );
     nameForCurrentExpression = fieldValue;
@@ -607,15 +686,16 @@ Type* IrGenerator::visit(ProtocolDeclNode& node) {
     //TODO implement protocol declaration
     return nullptr; 
 }
-
-
-
 Type* IrGenerator::visit(FunctionDeclNode& node) 
 { 
     if(node.isMethod){
+        // Only emit the lowered function definition here.
+        // The _register_method call is emitted inside $main (visit(ProgramNode))
+        // so it lands in valid IR context, not at the top level.
         auto loweredNode = lowering::methodToFunctionLowering(node.ownerTypeName, &node);
         return loweredNode->accept(*this);
     }
+    
     codeBuilder.add("export function {} $_{}",TypeUtils::toQbeType(node.returnType),node.name);
     codeBuilder.add("(");
     scopeTable.enterScope();
@@ -623,7 +703,7 @@ Type* IrGenerator::visit(FunctionDeclNode& node)
     for (int i = 0; i < node.params.size(); i++)
     {
         //To avoid conflict naming betwen QBE and hulk code.
-        std::string paramName = nameGenerator.generateName("_"+node.params[i]);
+        std::string paramName = nameManager.generateName("_"+node.params[i]);
         scopeTable.defineVariable(node.params[i], paramName);
         codeBuilder.add("{} {} %{}",
             separator ,
@@ -667,12 +747,16 @@ Type* IrGenerator::visit(AttributeDeclNode& node) {
 }
 Type* IrGenerator::visit(TypeDeclNode &node) {
     typeRegister.registerFromDeclaration(&node);
+    // The type-name symbol must exist before $main runs so that the
+    // _register_inheritance / _register_method calls in $main can reference it.
+    dataBuilder.addLine("data ${} = align {} {{b 0}}",node.name,targetInfo.PointerSize);
     codeBuilder.addLine("#Functions of type {}",node.name);
-    for  (auto member: node.members)
+    // NOTE: _register_inheritance and _register_method calls have been moved to
+    // visit(ProgramNode) so they are emitted inside $main (valid IR context).
+    for (auto member: node.members)
     {
-        //Attributes info is stored on the typeRegister,this 
-        //accept will call a FunctionDeclarationNode wich will be lowered
-        //will lower the functions
+        //Attributes info is stored on the typeRegister, this
+        //accept will call a FunctionDeclarationNode which will be lowered.
         member->accept(*this);
     }
     return nullptr;

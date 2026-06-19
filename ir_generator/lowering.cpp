@@ -34,14 +34,13 @@ namespace lowering {
         if (methodCall->receiver->type) {
             typeName = methodCall->receiver->type->toString();
         }
-        std::string newName = "_" + typeName + "_" + methodCall->name;
-
         std::vector<ASTNodePtr> newArgs = methodCall->args;
         // Method calling convention from methodToFunctionLowering appends self at the end
         newArgs.push_back(methodCall->receiver);
 
-        auto lowered = new FunctionCallNode(newName, newArgs);
+        auto lowered = new FunctionCallNode(methodCall->name, newArgs);
         lowered->type = methodCall->type;
+        lowered->receiver = methodCall->receiver;
         return lowered;
     }
 }
