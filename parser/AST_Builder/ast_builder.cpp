@@ -604,11 +604,14 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     if (match("statement", {"block"}) ||
         match("statement", {"return_stmt"}) ||
         match("statement", {"if_stmt"}) ||
-        match("statement", {"while_stmt"}) ||
-        match("statement", {"for_stmt"})) {
+        match("statement", {"while_stmt", "SEMICOLON"}) ||
+        match("statement", {"for_stmt", "SEMICOLON"})) {
         PASS();
     }
     if (match("return_stmt", {"RETURN", "expr", "SEMICOLON"})) {
+        return attach_span(new ReturnNode(RHS(1)), merged_rhs_span(rhs));
+    }
+    if (match("return_inline", {"RETURN", "expr"})) {
         return attach_span(new ReturnNode(RHS(1)), merged_rhs_span(rhs));
     }
     if (match("block", {"L_CURL_BRACK", "statements", "R_CURL_BRACK"})) {
@@ -625,7 +628,8 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     }
 
     // Conditionals and loops
-    if (match("if_stmt", {"IF", "L_PAREN", "expr", "R_PAREN", "conditional_stmt_body", "conditional_stmt_tail"})) {
+    if (match("if_stmt", {"IF", "L_PAREN", "expr", "R_PAREN", "conditional_stmt_body", "conditional_stmt_tail"})||
+        match("if_stmt", {"IF", "L_PAREN", "expr", "R_PAREN", "conditional_inline_stmt_body", "conditional_stmt_tail"})) {
         return attach_span(new IfNode(RHS(2), RHS(4), RHS(5)), merged_rhs_span(rhs));
     }
     if (match("conditional_stmt_tail", {})) {
@@ -637,6 +641,13 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     if (match("conditional_stmt_tail", {"ELIF", "L_PAREN", "expr", "R_PAREN", "conditional_stmt_body", "conditional_stmt_tail"})) {
         return attach_span(new IfNode(RHS(2), RHS(4), RHS(5)), merged_rhs_span(rhs));
     }
+    if (match("conditional_stmt_tail", {"ELSE", "conditional_inline_stmt_body"})) {
+        return pass_with_span(RHS(1), merged_rhs_span(rhs));
+    }
+    if (match("conditional_stmt_tail", {"ELIF", "L_PAREN", "expr", "R_PAREN", "conditional_inline_stmt_body", "conditional_stmt_tail"})) {
+        return attach_span(new IfNode(RHS(2), RHS(4), RHS(5)), merged_rhs_span(rhs));
+    }
+
     if (match("conditional_stmt_body", {"block"}) ||
         match("conditional_stmt_body", {"return_stmt"}) ||
         match("conditional_stmt_body", {"if_stmt"}) ||
@@ -644,8 +655,19 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         match("conditional_stmt_body", {"for_stmt"})) {
         PASS();
     }
+    if (match("conditional_inline_stmt_body", {"block"}) ||
+        match("conditional_inline_stmt_body", {"return_inline"}) ||
+        match("conditional_inline_stmt_body", {"if_stmt"}) ||
+        match("conditional_inline_stmt_body", {"while_stmt"}) ||
+        match("conditional_inline_stmt_body", {"for_stmt"})) {
+        PASS();
+    }
     if (match("conditional_stmt_body", {"assignment", "SEMICOLON"}) ||
         match("conditional_stmt_body", {"let_expr", "SEMICOLON"})) {
+        return attach_span(new ExprStmtNode(RHS(0)), merged_rhs_span(rhs));
+    }
+    if (match("conditional_inline_stmt_body", {"assignment"}) ||
+        match("conditional_inline_stmt_body", {"let_expr"})) {
         return attach_span(new ExprStmtNode(RHS(0)), merged_rhs_span(rhs));
     }
     if (match("while_stmt", {"WHILE", "L_PAREN", "expr", "R_PAREN", "loop_stmt_body"})) {
@@ -657,8 +679,8 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     if (match("loop_stmt_body", {"block"}) ||
         match("loop_stmt_body", {"return_stmt"}) ||
         match("loop_stmt_body", {"if_stmt"}) ||
-        match("loop_stmt_body", {"while_stmt"}) ||
-        match("loop_stmt_body", {"for_stmt"})) {
+        match("loop_stmt_body", {"while_stmt", "SEMICOLON"}) ||
+        match("loop_stmt_body", {"for_stmt", "SEMICOLON"})) {
         PASS();
     }
     if (match("loop_stmt_body", {"assignment", "SEMICOLON"}) ||
@@ -779,6 +801,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         return attach_span(new VariableNode(TOKEN(0)), rhs[0].span);
     }
     if (match("primary", {"global_call"}) ||
+        match("primary", {"if_expr"}) ||
         match("primary", {"member_call"}) ||
         match("primary", {"member_access"}) ||
         match("primary", {"index_access"}) ||
@@ -866,8 +889,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         }
         return attach_span(new LetBindingsNode(std::move(bindings)), merged_rhs_span(rhs));
     }
-    if (match("let_binding", {"IDENTIFIER", "opt_type_annotation", "EQUAL", "expr"}) ||
-        match("let_binding", {"LET", "IDENTIFIER", "opt_type_annotation", "EQUAL", "expr"})) {
+    if (match("let_binding", {"IDENTIFIER", "opt_type_annotation", "EQUAL", "expr"})) {
         bool withInnerLet = match("let_binding", {"LET", "IDENTIFIER", "opt_type_annotation", "EQUAL", "expr"});
         size_t nameIndex = withInnerLet ? 1 : 0;
         size_t typeIndex = withInnerLet ? 2 : 1;

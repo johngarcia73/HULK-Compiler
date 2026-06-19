@@ -175,4 +175,3 @@ let numbers = range(0, 10) in
 let numbers = [1, 2, 3, 4] in
     print(count_when(numbers, (x: Number): Bool => x % 2 == 0));
 
-123+12.8;

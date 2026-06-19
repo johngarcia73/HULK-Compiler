@@ -124,10 +124,12 @@ statement : assignment SEMICOLON
           | block
           | return_stmt
           | if_stmt
-          | while_stmt
-          | for_stmt
+          | while_stmt SEMICOLON
+          | for_stmt SEMICOLON
 
 return_stmt : RETURN expr SEMICOLON
+
+return_inline : RETURN expr
 
 block : L_CURL_BRACK statements R_CURL_BRACK
 
@@ -135,10 +137,22 @@ statements : /* empty */
            | statements statement
 
 if_stmt : IF L_PAREN expr R_PAREN conditional_stmt_body conditional_stmt_tail
+        | IF L_PAREN expr R_PAREN conditional_inline_stmt_body conditional_stmt_tail   
 
 conditional_stmt_tail : /* empty */
                       | ELSE conditional_stmt_body
                       | ELIF L_PAREN expr R_PAREN conditional_stmt_body conditional_stmt_tail
+                      | ELSE conditional_inline_stmt_body
+                      | ELIF L_PAREN expr R_PAREN conditional_inline_stmt_body conditional_stmt_tail
+
+conditional_inline_stmt_body : block
+                      | assignment
+                      | let_expr
+                      | return_stmt
+                      | if_stmt
+                      | while_stmt
+                      | for_stmt
+
 
 conditional_stmt_body : block
                       | assignment SEMICOLON
@@ -150,6 +164,7 @@ conditional_stmt_body : block
 
 while_stmt : WHILE L_PAREN expr R_PAREN loop_stmt_body
 
+
 for_stmt : FOR L_PAREN IDENTIFIER IN expr R_PAREN loop_stmt_body
 
 loop_stmt_body : block
@@ -157,8 +172,8 @@ loop_stmt_body : block
                | let_expr SEMICOLON
                | return_stmt
                | if_stmt
-               | while_stmt
-               | for_stmt
+               | while_stmt SEMICOLON
+               | for_stmt SEMICOLON
 
 expr : assignment
      | let_expr
@@ -216,6 +231,7 @@ primary : NUMBER
         | IDENTIFIER
         | lambda_expr
         | vector_expr
+        | if_expr
         | global_call
         | member_call
         | member_access
@@ -257,7 +273,6 @@ let_bindings : let_binding
              | let_bindings COMMA let_binding
 
 let_binding : IDENTIFIER opt_type_annotation EQUAL expr
-            | LET IDENTIFIER opt_type_annotation EQUAL expr
 
 if_expr : IF L_PAREN expr R_PAREN conditional_expr_body conditional_expr_tail
 

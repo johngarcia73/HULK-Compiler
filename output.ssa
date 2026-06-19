@@ -1,0 +1,8 @@
+
+
+export function w $main() {
+@start
+    #Initialize GC
+    call $_hulk_gc_init()
+    ret 0
+}

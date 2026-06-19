@@ -36,6 +36,7 @@ enum class TokenType : int {
     TOKEN_NOT,
     TOKEN_AND,
     TOKEN_OR,
+    TOKEN_POWER,
     TOKEN_PLUS,
     TOKEN_MINUS,
     TOKEN_STAR,
@@ -95,6 +96,7 @@ inline std::string token_type_to_string(TokenType t) {
         case TokenType::TOKEN_NUMBER:       return "NUMBER";
         case TokenType::TOKEN_STRING:       return "STRING";
         case TokenType::TOKEN_MODULE:       return "MODULE";
+        case TokenType::TOKEN_POWER:        return "POWER";
         case TokenType::TOKEN_PLUS:         return "PLUS";
         case TokenType::TOKEN_MINUS:        return "MINUS";
         case TokenType::TOKEN_STAR:         return "STAR";
@@ -196,6 +198,7 @@ inline std::vector<TokenSpec> default_token_specs() {
         { TokenType::TOKEN_STAR,     "\\*", false },
         { TokenType::TOKEN_SLASH,    "/",   false },
         { TokenType::TOKEN_CONCAT,   "@",   false },
+        { TokenType::TOKEN_POWER,    "^", false },
         { TokenType::TOKEN_LESS_THAN,    "<",   false },
         { TokenType::TOKEN_GREATER_THAN, ">",   false },
         { TokenType::TOKEN_EQUAL,    "=",  false },
