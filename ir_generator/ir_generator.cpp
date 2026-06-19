@@ -2,7 +2,7 @@
 #include "../parser/AST_Builder/ast_node.hpp"
 #include "lowering.hpp"
 #include "type_utils.hpp"
-
+#include <typeinfo>
 std::string IrGenerator::generate(ASTNodePtr node) {
     TypeUtils::setTarget(this->targetInfo);
     node->accept(*this);  
@@ -128,7 +128,6 @@ Type* IrGenerator::visit(LetNode& node) {
    return nullptr;
 }
 Type* IrGenerator::visit(IfNode& node) {
-
     std::string ifResult = nameManager.generateName("if_result");
 
     node.condition->accept(*this);
@@ -349,7 +348,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
     {
         nameForCurrentExpression = nameManager.generateName("equals");
         typeForCurrentExpression = "w";
-        if(node.left->type!=node.right->type)
+        if(node.right->type && node.left->type && typeid(*node.left->type)!=typeid(*node.right->type))
         {
             codeBuilder.addLine("%{} = w copy 0", nameForCurrentExpression);
         }
@@ -451,7 +450,11 @@ Type* IrGenerator::visit(StringNode& node) {
                             node.value);
     }
     nameForCurrentExpression = stringPool.getOrCreateId(node.value);
-    codeBuilder.addLine("%{} = {} copy ${}", nameForCurrentExpression, typeForCurrentExpression, nameForCurrentExpression);    
+    typeForCurrentExpression=targetInfo.PointerType;
+    codeBuilder.addLine("%{} = {} copy ${}", 
+                            nameForCurrentExpression,
+                            typeForCurrentExpression, 
+                            nameForCurrentExpression);    
     
     return nullptr;
  }
