@@ -496,6 +496,27 @@ public:
             }
         }
 
+        ///////
+        for (auto& [name, record] : userTypes_) {
+            if (record.parentName.empty() || record.parentName == "Object") continue;
+            RegisteredType* parentRecord = findUserType(record.parentName);
+            if (!parentRecord) continue;
+
+            // Copiar atributos del padre que no estén en el hijo
+            for (const auto& [attrName, attrInfo] : parentRecord->attributes) {
+                if (record.attributes.find(attrName) == record.attributes.end()) {
+                    record.attributes[attrName] = attrInfo;
+                }
+            }
+            // Copiar métodos del padre que no estén en el hijo
+            for (const auto& [methodName, methodInfo] : parentRecord->methods) {
+                if (record.methods.find(methodName) == record.methods.end()) {
+                    record.methods[methodName] = methodInfo;
+                }
+            }
+        }
+        //////
+
         for (auto& [name, record] : protocols_) {
             if (record.parentName.empty()) {
                 continue;

@@ -26,7 +26,7 @@ static std::string resolve_path(std::initializer_list<const char*> candidates) {
 }
 
 struct RunnerOptions {
-    std::string program_path = resolve_path({"program.hulk", "tests/program.hulk"});
+    std::string program_path = resolve_path({"../tests/integration_tests/ok/types/inference_complex.hulk", "tests/program.hulk"});
     bool trace_pipeline = true;
     bool trace_inference = true;
     bool trace_overloads = true;

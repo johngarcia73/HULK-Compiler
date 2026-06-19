@@ -5,6 +5,10 @@
 DepNode* DependencyGraph::getOrCreateNode(const std::string& name, DepNodeKind kind, ASTNode* ast) {
     auto it = nodes.find(name);
     if (it != nodes.end()) {
+        // If given an  AST and node doesn't have it, update it.
+        if (ast != nullptr) {
+            it->second->ast = ast;
+        }
         return it->second.get();
     }
     auto node = std::make_unique<DepNode>(name, kind, ast);
@@ -66,8 +70,8 @@ bool DependencyGraph::topologicalSort() {
         }
     }
 
-    // Invert to get topological sorting (nodes without dependency first)
-    std::reverse(topologicalOrder.begin(), topologicalOrder.end());
+    // The DFS post-order already produces a topological order for this graph,
+    // because edges point from a node to the nodes it depends on.
     return !hasCycle;
 }
 
