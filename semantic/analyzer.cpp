@@ -107,6 +107,7 @@ SemanticAnalysisResult SemanticAnalyzer::analyze(
     context.tracePipeline("Collecting declarations and dependencies.");
     inferencer.collectDeclarations(root);
 
+    
     std::vector<FunctionDeclNode*> orderedFunctions = inferencer.getPendingFunctions();
     if (!graph.topologicalSort()) {
         context.warning(
@@ -123,6 +124,19 @@ SemanticAnalysisResult SemanticAnalyzer::analyze(
     for (auto* function : orderedFunctions) {
         inferencer.analyzeFunction(function);
     }
+
+
+/*
+    context.tracePipeline(
+        "Analyzing " + std::to_string(inferencer.getPendingFunctions().size()) + " function body/bodies.");
+
+    // Usa directamente el orden de declaración (orden en que aparecen en el AST)
+    for (auto* function : inferencer.getPendingFunctions()) {
+        inferencer.analyzeFunction(function);
+    }
+
+*/
+
 
     context.tracePipeline("Analyzing type declarations.");
     inferencer.analyzeTypes();
