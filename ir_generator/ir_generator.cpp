@@ -438,16 +438,19 @@ Type* IrGenerator::visit(ExprStmtNode& node) {
     return nullptr;
 }
 Type* IrGenerator::visit(StringNode& node) { 
-    nameForCurrentExpression = stringPool.getOrCreateId(node.value);
-    typeForCurrentExpression = TypeUtils::toQbeType(node.type);
-                            //Size (int 32)  //the string  //seperator 
-    dataBuilder.addLine("data ${} = align {} {{ w {}, b \"{}\", b 0}}",
-                        nameForCurrentExpression,
-                        targetInfo.StackAlign,
-                        node.value.size(),
-                        node.value);
-   
     
+    if(!stringPool.contains(node.value))
+    {   
+        nameForCurrentExpression = stringPool.getOrCreateId(node.value);
+        typeForCurrentExpression = TypeUtils::toQbeType(node.type);
+                                //Size (int 32)  //the string  //seperator 
+        dataBuilder.addLine("data ${} = align {} {{ w {}, b \"{}\", b 0}}",
+                            nameForCurrentExpression,
+                            targetInfo.StackAlign,
+                            node.value.size(),
+                            node.value);
+    }
+    nameForCurrentExpression = stringPool.getOrCreateId(node.value);
     codeBuilder.addLine("%{} = {} copy ${}", nameForCurrentExpression, typeForCurrentExpression, nameForCurrentExpression);    
     
     return nullptr;

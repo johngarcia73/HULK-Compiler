@@ -7,7 +7,10 @@ class StringPool {
 private:
     std::unordered_map<std::string, std::string> pool;
 public:
-   
+    bool contains(const std::string& str){
+        auto it = pool.find(str);
+        return it != pool.end();
+    }
     std::string getOrCreateId(const std::string& str) {
         auto it = pool.find(str);
         if (it != pool.end()) {
