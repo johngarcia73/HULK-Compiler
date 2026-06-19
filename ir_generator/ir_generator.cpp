@@ -2,7 +2,7 @@
 #include "../parser/AST_Builder/ast_node.hpp"
 #include "lowering.hpp"
 #include "type_utils.hpp"
-
+#include <typeinfo>
 std::string IrGenerator::generate(ASTNodePtr node) {
     TypeUtils::setTarget(this->targetInfo);
     node->accept(*this);  
@@ -128,7 +128,6 @@ Type* IrGenerator::visit(LetNode& node) {
    return nullptr;
 }
 Type* IrGenerator::visit(IfNode& node) {
-
     std::string ifResult = nameManager.generateName("if_result");
 
     node.condition->accept(*this);
@@ -349,11 +348,11 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
     {
         nameForCurrentExpression = nameManager.generateName("equals");
         typeForCurrentExpression = "w";
-        if(node.left->type!=node.right->type)
+        if(node.right->type && node.left->type && typeid(*node.left->type)!=typeid(*node.right->type))
         {
             codeBuilder.addLine("%{} = w copy 0", nameForCurrentExpression);
         }
-        else if(node.left->type==StringType::instance())
+        else if(dynamic_cast<StringType*>(node.left->type))
         {
             codeBuilder.addLine("%{} = w call $_string_compair({} %{}, {} %{})", 
                             nameForCurrentExpression, 
@@ -451,7 +450,11 @@ Type* IrGenerator::visit(StringNode& node) {
                             node.value);
     }
     nameForCurrentExpression = stringPool.getOrCreateId(node.value);
-    codeBuilder.addLine("%{} = {} copy ${}", nameForCurrentExpression, typeForCurrentExpression, nameForCurrentExpression);    
+    typeForCurrentExpression=targetInfo.PointerType;
+    codeBuilder.addLine("%{} = {} copy ${}", 
+                            nameForCurrentExpression,
+                            typeForCurrentExpression, 
+                            nameForCurrentExpression);    
     
     return nullptr;
  }
@@ -484,6 +487,14 @@ Type* IrGenerator::visit(UnaryOpNode& node) {
                             typeForCurrentExpression,
                             operandResult             
                 ); 
+    }
+    else if(node.op=="!"){
+        nameForCurrentExpression = nameManager.generateName("not");
+        codeBuilder.addLine("%{} = {} xor 1, %{}",
+                            nameForCurrentExpression,
+                            typeForCurrentExpression,
+                            operandResult             
+                );
     }
     return nullptr;
 }
@@ -604,7 +615,7 @@ Type* IrGenerator::visit(NewNode& node) {
         codeBuilder.addLine("#Evaluate constructor args expressions of type{}",currentType);
 
         std::vector<std::string> evaluatedArgsNames; 
-        for(int i=0; constructorArgs.size(); i++)
+        for(int i=0; i<constructorArgs.size(); i++)
         {
             constructorArgs[i]->accept(*this); //Value of argument
             evaluatedArgsNames.push_back(nameForCurrentExpression);

@@ -13,7 +13,6 @@
 #include <vector>
 
 
-
 class ASTNode;
 
 class IrGenerator : public Visitor {
