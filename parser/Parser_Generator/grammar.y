@@ -42,11 +42,12 @@
 
 program : top_level_items
 
-top_level_items : /* empty */
+top_level_items : top_level_item
                | top_level_items top_level_item
 
 top_level_item : declaration
                | statement
+               | expr
 
 declaration : function_decl
             | type_decl
@@ -120,8 +121,7 @@ type_list_opt : /* empty */
 type_list : type
           | type_list COMMA type
 
-statement : assignment SEMICOLON
-          | let_expr SEMICOLON
+statement : expr SEMICOLON
           | block
           | return_stmt
           | if_stmt
@@ -235,6 +235,7 @@ primary : NUMBER
         | FALSE
         | IDENTIFIER
         | lambda_expr
+        | function_expr
         | vector_expr
         | if_expr
         | global_call
@@ -243,6 +244,11 @@ primary : NUMBER
         | index_access
         | new_expr
         | L_PAREN expr R_PAREN
+
+function_expr : FUNCTION L_PAREN param_list_opt R_PAREN block
+              | FUNCTION L_PAREN param_list_opt R_PAREN COLON type block
+              | FUNCTION L_PAREN param_list_opt R_PAREN TYPE_ARROW expr
+              | FUNCTION L_PAREN param_list_opt R_PAREN COLON type TYPE_ARROW expr
 
 global_call : IDENTIFIER L_PAREN arg_list_opt R_PAREN
 
@@ -262,8 +268,8 @@ index_access : access_base L_SQUARE_BRACK expr R_SQUARE_BRACK
 
 new_expr : NEW IDENTIFIER L_PAREN arg_list_opt R_PAREN
 
-lambda_expr : L_PAREN param_list_opt R_PAREN ARROW expr
-            | L_PAREN param_list_opt R_PAREN COLON type ARROW expr
+lambda_expr : L_PAREN param_list_opt R_PAREN TYPE_ARROW expr
+            | L_PAREN param_list_opt R_PAREN COLON type TYPE_ARROW expr
 
 vector_expr : L_SQUARE_BRACK R_SQUARE_BRACK
             | L_SQUARE_BRACK vector_items R_SQUARE_BRACK

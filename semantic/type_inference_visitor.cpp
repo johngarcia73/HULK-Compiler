@@ -1288,6 +1288,23 @@ Type* TypeInferenceVisitor::visit(AssignmentNode& node) {
         return node.type;
     }
 
+    if (isNumberType(targetType) && isNumberType(valueType)) {
+        Type* common = commonNumberType(targetType, valueType);
+        if (common && !common->equals(targetType)) {
+            if (auto* variable = dynamic_cast<VariableNode*>(node.target)) {
+                SymbolInfo* symbol = symTable.lookup(variable->name);
+                if (symbol && symbol->type) {
+                    symbol->type = common;
+                    traceInference(
+                        "Assignment refined '" + variable->name + "' to " + common->toString() +
+                        " at " + safeSpanName(node.span));
+                }
+            }
+        }
+        node.type = valueType;
+        return node.type;
+    }
+    
     if (!targetType->equals(UnknownType::instance()) &&
         !valueType->equals(UnknownType::instance()) &&
         !typeRegistry.conforms(valueType, targetType)) {
@@ -1316,7 +1333,6 @@ Type* TypeInferenceVisitor::visit(AssignmentNode& node) {
     node.type = valueType;
     return node.type;
 }
-
 Type* TypeInferenceVisitor::visit(MemberAccessNode& node) {
     if (collecting) {
         if (collectingDependencies && node.base) {

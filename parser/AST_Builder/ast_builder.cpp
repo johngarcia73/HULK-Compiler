@@ -295,15 +295,19 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         }
         return attach_span(new ProgramNode({}, {}), merged_rhs_span(rhs));
     }
-    if (match("top_level_items", {})) {
-        return attach_span(new BlockNode({}), {});
+    if (match("top_level_items", {"top_level_item"})) {
+        std::vector<ASTNode*> items;
+        items.push_back(RHS(0));
+        return attach_span(new BlockNode(std::move(items)), merged_rhs_span(rhs));
     }
     if (match("top_level_items", {"top_level_items", "top_level_item"})) {
         BUILD_BLOCK(RHS(0), RHS(1));
     }
-    if (match("top_level_item", {"declaration"}) || match("top_level_item", {"statement"})) {
-        PASS();
-    }
+
+    // top_level_item
+    if (match("top_level_item", {"declaration"})) { PASS(); }
+    if (match("top_level_item", {"statement"}))   { PASS(); }
+    if (match("top_level_item", {"expr"}))        { PASS(); }
     if (match("declaration", {"function_decl"}) ||
         match("declaration", {"type_decl"}) ||
         match("declaration", {"protocol_decl"})) {
@@ -323,6 +327,37 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     if (match("function_decl", {"FUNCTION", "IDENTIFIER", "L_PAREN", "param_list_opt", "R_PAREN", "COLON", "type", "ARROW", "expr", "SEMICOLON"})) {
         return build_function_like(TOKEN(1), dynamic_cast<ParamListNode*>(RHS(3)), dynamic_cast<TypeNode*>(RHS(6)), RHS(8), true, false, merged_rhs_span(rhs));
     }
+
+    // Function expression for lambdas
+    if (match("function_expr", {"FUNCTION", "L_PAREN", "param_list_opt", "R_PAREN", "TYPE_ARROW", "expr"})) {
+        return build_lambda(
+            dynamic_cast<ParamListNode*>(RHS(2)),
+            nullptr,
+            RHS(5),
+            merged_rhs_span(rhs));
+    }
+    if (match("function_expr", {"FUNCTION", "L_PAREN", "param_list_opt", "R_PAREN", "COLON", "type", "TYPE_ARROW", "expr"})) {
+        return build_lambda(
+            dynamic_cast<ParamListNode*>(RHS(2)),
+            dynamic_cast<TypeNode*>(RHS(5)),
+            RHS(7),
+            merged_rhs_span(rhs));
+    }
+    if (match("function_expr", {"FUNCTION", "L_PAREN", "param_list_opt", "R_PAREN", "block"})) {
+        return build_lambda(
+            dynamic_cast<ParamListNode*>(RHS(2)),
+            nullptr,
+            RHS(4),
+            merged_rhs_span(rhs));
+    }
+    if (match("function_expr", {"FUNCTION", "L_PAREN", "param_list_opt", "R_PAREN", "COLON", "type", "block"})) {
+        return build_lambda(
+            dynamic_cast<ParamListNode*>(RHS(2)),
+            dynamic_cast<TypeNode*>(RHS(5)),
+            RHS(6),
+            merged_rhs_span(rhs));
+    }
+
 
     // Type declarations
     if (match("type_decl", {"TYPE", "IDENTIFIER", "ctor_param_clause_opt", "inheritance_clause", "type_body"})) {
@@ -598,7 +633,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     }
 
     // Statements
-    if (match("statement", {"assignment", "SEMICOLON"}) || match("statement", {"let_expr", "SEMICOLON"})) {
+    if (match("statement", {"expr", "SEMICOLON"})) {
         return attach_span(new ExprStmtNode(RHS(0)), merged_rhs_span(rhs));
     }
     if (match("statement", {"block"}) ||
@@ -763,7 +798,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
     if (match("additive", {"additive", "MINUS", "multiplicative"})) {
         BIN_OP("-");
     }
-    
+
     if (match("multiplicative", {"multiplicative", "STAR", "powered"})) { BIN_OP("*"); }
     if (match("multiplicative", {"multiplicative", "SLASH", "powered"})) { BIN_OP("/"); }
     if (match("multiplicative", {"multiplicative", "MODULE", "powered"})) { BIN_OP("%"); }
@@ -811,6 +846,7 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         match("primary", {"member_access"}) ||
         match("primary", {"index_access"}) ||
         match("primary", {"lambda_expr"}) ||
+        match("primary", {"function_expr"}) ||
         match("primary", {"vector_expr"}) ||
         match("primary", {"new_expr"})) {
         PASS();
