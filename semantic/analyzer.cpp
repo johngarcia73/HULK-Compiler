@@ -69,9 +69,7 @@ void SemanticAnalyzer::registerBuiltinFunctions(SemanticContext& context) {
             {StringType::instance(), StringType::instance()},
             StringType::instance()));
 
-    insertBuiltin("print", new FunctionType({NumberType::instance()}, VoidType::instance()));
-    insertBuiltin("print", new FunctionType({StringType::instance()}, VoidType::instance()));
-    insertBuiltin("print", new FunctionType({UnknownType::instance()}, VoidType::instance()));
+    insertBuiltin("print", new FunctionType({AnyType::instance()}, AnyType::instance()));
 }
 
 void SemanticAnalyzer::refreshLegacyErrors() {

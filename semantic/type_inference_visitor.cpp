@@ -923,7 +923,11 @@ Type* TypeInferenceVisitor::visit(FunctionCallNode& node) {
         for (size_t i = 0; i < params.size() && i < node.args.size(); ++i) {
             refineUnknownExpression(node.args[i], params[i]);
         }
-        node.type = coerceUnknown(resolution.selected->getReturnType());
+        if (node.name == "print" && node.args.size() == 1) {
+            node.type = argumentTypes[0];
+        } else {
+            node.type = coerceUnknown(resolution.selected->getReturnType());
+        }
         context.traceOverload(
             "Resolved '" + node.name + "' to " + resolution.selected->toString() +
             " at " + safeSpanName(node.span));
