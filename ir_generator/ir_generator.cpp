@@ -352,7 +352,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
         {
             codeBuilder.addLine("%{} = w copy 0", nameForCurrentExpression);
         }
-        else if(node.left->type==StringType::instance())
+        else if(dynamic_cast<StringType*>(node.left->type))
         {
             codeBuilder.addLine("%{} = w call $_string_compair({} %{}, {} %{})", 
                             nameForCurrentExpression, 
@@ -488,6 +488,14 @@ Type* IrGenerator::visit(UnaryOpNode& node) {
                             operandResult             
                 ); 
     }
+    else if(node.op=="!"){
+        nameForCurrentExpression = nameManager.generateName("not");
+        codeBuilder.addLine("%{} = {} xor 1, %{}",
+                            nameForCurrentExpression,
+                            typeForCurrentExpression,
+                            operandResult             
+                );
+    }
     return nullptr;
 }
 Type* IrGenerator::visit(AssignmentNode& node) {
@@ -607,7 +615,7 @@ Type* IrGenerator::visit(NewNode& node) {
         codeBuilder.addLine("#Evaluate constructor args expressions of type{}",currentType);
 
         std::vector<std::string> evaluatedArgsNames; 
-        for(int i=0; constructorArgs.size(); i++)
+        for(int i=0; i<constructorArgs.size(); i++)
         {
             constructorArgs[i]->accept(*this); //Value of argument
             evaluatedArgsNames.push_back(nameForCurrentExpression);
