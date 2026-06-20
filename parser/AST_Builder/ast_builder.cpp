@@ -643,6 +643,8 @@ ASTNode* ASTBuilder::build(size_t pid, const std::vector<Value>& rhs) {
         match("statement", {"for_stmt", "SEMICOLON"})) {
         PASS();
     }
+    if (match("statement", {"block", "SEMICOLON"})) return RHS(0);
+    
     if (match("return_stmt", {"RETURN", "expr", "SEMICOLON"})) {
         return attach_span(new ReturnNode(RHS(1)), merged_rhs_span(rhs));
     }
