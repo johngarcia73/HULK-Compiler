@@ -51,7 +51,7 @@ Type* IrGenerator::visit(ProgramNode& node) {
             }
             // Compute the lowered function name (same rule used in FunctionDeclNode visit).
             std::string loweredName = method->ownerTypeName + "_" + method->name;
-            codeBuilder.addLine("call $_register_method(l ${},l ${},l $_{})",
+            codeBuilder.addLine("call $_register_method(l ${},l ${},l $__{})",
                                 method->ownerTypeName,
                                 method->name,
                                 loweredName
@@ -624,12 +624,12 @@ Type* IrGenerator::visit(NewNode& node) {
         for (int i=0;i<evaluatedArgsNames.size();i++)
         {
             scopeTable.defineVariable(
-                        typeRegister.getDeclaration(node.typeName)->ctorParams[i],
+                        typeRegister.getDeclaration(currentType)->ctorParams[i],
                         evaluatedArgsNames[i]
             );
         }
         //Initialize attribues with that values
-        for(auto member: typeRegister.getDeclaration(node.typeName)->members){
+        for(auto member: typeRegister.getDeclaration(currentType)->members){
             //if member is an attribute decleration we need to initialize it
             auto attr = dynamic_cast<AttributeDeclNode*>(member);
             if(!attr) continue;
@@ -637,7 +637,7 @@ Type* IrGenerator::visit(NewNode& node) {
             int offset = typeRegister.getOffset(currentType,attr->name);
             std::string wordSize = typeRegister.getWordSize(currentType,attr->name);
             codeBuilder.addLine("# Initialize field {}", attr->name);
-            std::string fieldRegister = nameManager.generateName(node.typeName+"_obj_"+attr->name);
+            std::string fieldRegister = nameManager.generateName(currentType+"_obj_"+attr->name);
         
             codeBuilder.addLine("%{} = {} add %{}, {}",
                                 fieldRegister,

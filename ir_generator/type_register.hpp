@@ -26,28 +26,28 @@ public:
       if(typeName=="Object"){
         
         size= TypeUtils::currentTarget.PointerSize;
-        wordSize = TypeUtils::currentTarget.PointerType;
         //Not need to care about other invariants in this case
-        
+        //Add typeName,currentOffset to sizes.
+        sizes[typeName] = size;
+        //Add typeName,true to computedLayout
+        computedLayout[typeName] = true;
         return;
       }
 
       //Found the type declaration for typeName on declartions and store in decl
       TypeDeclNode* decl = declarations.at(typeName);
       computeLayout(decl->parentType);
-      //Get the size of the parent layout and store it on currentOffset
-      int currentOffset = decl->parentType.empty() ? 0 : sizes[decl->parentType];
+      int currentOffset = sizes[decl->parentType];
       for(auto member: decl->members)
       {
         auto attr=dynamic_cast<AttributeDeclNode*>(member);
         if(attr){
-            currentOffset+=TypeUtils::getByteSize(attr->type);
-            
             //Add attr->name,currentOffset to the map with the key typeName on offsets
             offsets[typeName][attr->name] = currentOffset;
-            wordSize = TypeUtils::toQbeType(decl->type);
+            wordSize = TypeUtils::toQbeType(attr->type);
             //Add attr->name,wordSize to the map on with key typeName on wordSizes
             wordSizes[typeName][attr->name] = wordSize;
+            currentOffset+=TypeUtils::getByteSize(attr->type);
         }
         
       }
