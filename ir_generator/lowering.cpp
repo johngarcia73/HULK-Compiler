@@ -16,9 +16,9 @@ namespace lowering {
         FunctionDeclNode* loweredFunc = nullptr;
 
         if (method->isInline) {
-            loweredFunc = new FunctionDeclNode(newName, newParams, newParamTypes, method->declaredReturnType, method->exprBody, true);
+            loweredFunc = new FunctionDeclNode(newName, newParams, newParamTypes, method->returnType, method->exprBody, true);
         } else {
-            loweredFunc = new FunctionDeclNode(newName, newParams, newParamTypes, method->declaredReturnType, method->body);
+            loweredFunc = new FunctionDeclNode(newName, newParams, newParamTypes, method->returnType, method->body);
         }
 
         loweredFunc->paramTypeNames = method->paramTypeNames;
