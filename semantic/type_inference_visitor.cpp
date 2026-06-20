@@ -873,6 +873,14 @@ Type* TypeInferenceVisitor::visit(FunctionCallNode& node) {
             refineUnknownExpression(node.args[i], params[i]);
             argumentTypes[i] = node.args[i] ? coerceUnknown(node.args[i]->accept(*this)) : UnknownType::instance();
         }
+
+        // Re-visit arguments
+        for (size_t i = 0; i < params.size() && i < node.args.size(); ++i) {
+            if (node.args[i]) {
+                node.args[i]->accept(*this);
+            }
+        }
+
         validate_function_like(method->type, method->ownerTypeName + "." + node.name);
         node.type = coerceUnknown(method->type->getReturnType());
         return node.type;
@@ -905,6 +913,14 @@ Type* TypeInferenceVisitor::visit(FunctionCallNode& node) {
             refineUnknownExpression(node.args[i], params[i]);
             argumentTypes[i] = node.args[i] ? coerceUnknown(node.args[i]->accept(*this)) : UnknownType::instance();
         }
+
+        // Revisit
+        for (size_t i = 0; i < params.size() && i < node.args.size(); ++i) {
+            if (node.args[i]) {
+                node.args[i]->accept(*this);
+            }
+        }
+        
         validate_function_like(baseMethod->type, "base");
         node.type = coerceUnknown(baseMethod->type->getReturnType());
         return node.type;
@@ -923,6 +939,15 @@ Type* TypeInferenceVisitor::visit(FunctionCallNode& node) {
         for (size_t i = 0; i < params.size() && i < node.args.size(); ++i) {
             refineUnknownExpression(node.args[i], params[i]);
         }
+
+        // Re-visit arguments to update nodes
+        for (size_t i = 0; i < params.size() && i < node.args.size(); ++i) {
+            if (node.args[i]) {
+                node.args[i]->accept(*this);
+            }
+        }
+
+
         if (node.name == "print" && node.args.size() == 1) {
             node.type = argumentTypes[0];
         } else {
