@@ -1,8 +1,62 @@
+data $Object = align 8 {b 0}
+data $Range = align 8 {b 0}
+data $next = align 8 {b 0}
+data $current = align 8 {b 0}
 
+
+#Functions of type Range
+export function w $__Range_next( l %_self1){
+@start
+    %_self1_curr1 = l add %_self1, 24
+    %field_value1 = d loadd %_self1_curr1
+    %num_literal1 =d copy d_1
+    %addition1 = d add %field_value1, %num_literal1
+    %_self1_curr2 = l add %_self1, 24
+    stored %addition1, %_self1_curr2
+    %_self1_max1 = l add %_self1, 16
+    %field_value2 = d loadd %_self1_max1
+    %less_than1 = w cltd %addition1, %field_value2
+    ret %less_than1
+}
+
+export function d $__Range_current( l %_self2){
+@start
+    %_self2_curr1 = l add %_self2, 24
+    %field_value3 = d loadd %_self2_curr1
+    ret %field_value3
+}
+
+export function l $_range( d %_min1, d %_max1){
+@start
+    # Initialize and object of type Range
+    %Range_obj1 = l call $_hulk_alloc(l 32)
+    # Set type name on the first offset for the object
+    storel $Range, %Range_obj1
+    #Evaluate constructor args expressions of typeRange
+    # Initialize field min
+    %Range_obj_min1 = l add %Range_obj1, 8
+    stored %_min1, %Range_obj_min1
+    # Initialize field max
+    %Range_obj_max1 = l add %Range_obj1, 16
+    stored %_max1, %Range_obj_max1
+    # Initialize field curr
+    %Range_obj_curr1 = l add %Range_obj1, 24
+    %num_literal2 =d copy d_1
+    %subtraction1 = d sub %_min1, %num_literal2
+    stored %subtraction1, %Range_obj_curr1
+    ret %Range_obj1
+    %block_result1 = l copy %Range_obj1
+    ret %block_result1
+}
 
 export function w $main() {
 @start
     #Initialize GC
     call $_hulk_gc_init()
+    call $_initialize_vtables()
+    #Register class methods on VTABLES
+    call $_register_inheritance(l $Range,l $Object)
+    call $_register_method(l $Range,l $next,l $__Range_next)
+    call $_register_method(l $Range,l $current,l $__Range_current)
     ret 0
 }

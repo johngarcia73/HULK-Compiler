@@ -18,8 +18,19 @@
 #include <string>
 #include <sys/stat.h>
 #include <unordered_map>
+#include <filesystem>
 
 namespace {
+
+bool same_file_path(const std::string& a, const std::string& b) {
+    try {
+        const std::filesystem::path pathA = std::filesystem::weakly_canonical(a);
+        const std::filesystem::path pathB = std::filesystem::weakly_canonical(b);
+        return pathA == pathB;
+    } catch (const std::exception&) {
+        return a == b || a == "./" + b || b == "./" + a;
+    }
+}
 
 std::string error_type_name(CompilerErrorKind kind) {
     switch (kind) {
@@ -142,7 +153,12 @@ FrontendPipelineResult run_frontend_pipeline(const std::string& source_path) {
     std::remove("output");
 
     try {
-        const std::string input = read_file(source_path);
+        const std::string user_input = read_file(source_path);
+        const std::string builtin_path = "builtin.hulk";
+        const std::string builtin_input = read_file(builtin_path);
+        const std::string input = same_file_path(source_path, builtin_path)
+            ? user_input
+            : builtin_input + "\n" + user_input;
         FrontendCacheOptions cache_options = production_cache_options();
         CachedParserBundle parser_bundle = load_cached_parser(
             "parser/Parser_Generator/grammar.y",

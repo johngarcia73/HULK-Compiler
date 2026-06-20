@@ -61,22 +61,21 @@ Type* TypeInferenceVisitor::resolveDeclaredType(
     if (typeName.empty()) {
         return nullptr;
     }
-    if (typeName == "Iterable") {
-        return new IterableType(ObjectType::instance());
+
+    Type* resolved = typeRegistry.resolveTypeName(typeName);
+    if (resolved) {
+        return resolved;
     }
+    
     if (typeName == "Enumerable") {
         return new EnumerableType(ObjectType::instance());
     }
 
-    Type* resolved = typeRegistry.resolveTypeName(typeName);
-    if (!resolved) {
-        error(
-            SemanticPhase::Declarations,
-            node,
-            "Unknown type '" + typeName + "'.");
-        return UnknownType::instance();
-    }
-    return resolved;
+    error(
+        SemanticPhase::Declarations,
+        node,
+        "Unknown type '" + typeName + "'.");
+    return UnknownType::instance();
 }
 
 bool TypeInferenceVisitor::checkTypeConformance(
@@ -920,7 +919,7 @@ Type* TypeInferenceVisitor::visit(FunctionCallNode& node) {
                 node.args[i]->accept(*this);
             }
         }
-        
+
         validate_function_like(baseMethod->type, "base");
         node.type = coerceUnknown(baseMethod->type->getReturnType());
         return node.type;
