@@ -46,3 +46,5 @@ tests/integration_tests/results/
 *.swp
 .DS_Store
 .codex
+#Binaries
+hulk
