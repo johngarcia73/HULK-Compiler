@@ -1,0 +1,14 @@
+protocol Iterable{
+    next(): Boolean;
+    current():Object;
+}
+type Range(min:Number,max:Number){
+    min:Number = min;
+    max:Number = max;
+    curr:Number = min-1;
+    next():Boolean => (self.curr := self.curr+1)<self.max;
+    current():Number=>self.current;
+}
+function range(min:Number,max:Number):Range{
+    return new Range(min,max);
+}

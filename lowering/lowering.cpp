@@ -186,6 +186,16 @@ Type* LoweringVisitor::visit(ForNode& node) {
     // `let it = iterable.iterator() in while (it.next()) { let x = it.current() in body }`
     // This allows the IR generator to only worry about implementing `while` loops.
     // To do this, we would replace the ForNode in the AST with the corresponding LetNode + WhileNode structure.
+    //Lowers for loop into 
+    /*
+
+
+    while (iterable.next())
+        let x = iterable.current() in
+        body
+        */
+        //auto whileNode = 
+    auto parentRefCopy = parentReference;
     if (node.iterable) {
         parentReference = &node.iterable;
         node.iterable->accept(*this);
@@ -194,6 +204,20 @@ Type* LoweringVisitor::visit(ForNode& node) {
         parentReference = &node.body;
         node.body->accept(*this);
     }
+    std::vector<ASTNodePtr> emptyVec;
+    auto whileCond = new FunctionCallNode("next",emptyVec,node.iterable);
+    whileCond->type = BoolType::instance();
+    auto currentCall =new FunctionCallNode("current",emptyVec);
+    currentCall->type = node.type;
+    ASTNodePtr whileBody = new LetNode(node.iterator,currentCall,node.body);
+    whileBody->type = node.type;
+    std::vector<ASTNodePtr> singleExpVector;
+    singleExpVector.push_back(whileBody);
+    whileBody = new BlockNode(singleExpVector);
+    whileBody->type = node.type;
+    ASTNodePtr whileNode =new WhileNode(whileCond,whileBody);
+    whileNode->type = node.type; 
+    *parentRefCopy= whileNode;
     return nullptr;
 }
 
