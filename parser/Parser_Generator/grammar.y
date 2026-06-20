@@ -123,6 +123,7 @@ type_list : type
 
 statement : expr SEMICOLON
           | block
+          | block SEMICOLON
           | return_stmt
           | if_stmt
           | while_stmt SEMICOLON
