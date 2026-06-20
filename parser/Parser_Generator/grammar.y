@@ -8,9 +8,9 @@
 %token IF ELIF ELSE
 %token WHILE FOR
 %token TRUE FALSE
-%token PLUS MINUS STAR SLASH MODULE
+%token PLUS MINUS STAR SLASH MODULE POWER
 %token NOT AND OR
-%token CONCAT
+%token CONCAT CONCAT_SPACE
 %token LESS_THAN GREATER_THAN LESS_EQUALS GREATER_EQUALS EQUALITY NOT_EQUAL
 %token NUMBER
 %token NUMBER_TYPE
@@ -31,9 +31,10 @@
 %left OR
 %left AND
 %nonassoc EQUALITY NOT_EQUAL LESS_THAN GREATER_THAN LESS_EQUALS GREATER_EQUALS IS AS
-%left CONCAT
+%left CONCAT CONCAT_SPACE
 %left PLUS MINUS
 %left STAR SLASH MODULE
+%right POWER
 %right NOT
 %nonassoc ELSE ELIF
 
@@ -41,11 +42,12 @@
 
 program : top_level_items
 
-top_level_items : /* empty */
+top_level_items : top_level_item
                | top_level_items top_level_item
 
 top_level_item : declaration
                | statement
+               | expr
 
 declaration : function_decl
             | type_decl
@@ -119,8 +121,7 @@ type_list_opt : /* empty */
 type_list : type
           | type_list COMMA type
 
-statement : assignment SEMICOLON
-          | let_expr SEMICOLON
+statement : expr SEMICOLON
           | block
           | return_stmt
           | if_stmt
@@ -209,15 +210,19 @@ relational : concatenation
 
 concatenation : additive
               | concatenation CONCAT additive
-
+              | concatenation CONCAT_SPACE additive
+              
 additive : multiplicative
          | additive PLUS multiplicative
          | additive MINUS multiplicative
 
-multiplicative : unary
-               | multiplicative STAR unary
-               | multiplicative SLASH unary
-               | multiplicative MODULE unary
+multiplicative : powered
+               | multiplicative STAR powered
+               | multiplicative SLASH powered
+               | multiplicative MODULE powered
+
+powered : unary
+        | unary POWER powered 
 
 unary : MINUS unary
       | PLUS unary
@@ -230,6 +235,7 @@ primary : NUMBER
         | FALSE
         | IDENTIFIER
         | lambda_expr
+        | function_expr
         | vector_expr
         | if_expr
         | global_call
@@ -238,6 +244,11 @@ primary : NUMBER
         | index_access
         | new_expr
         | L_PAREN expr R_PAREN
+
+function_expr : FUNCTION L_PAREN param_list_opt R_PAREN block
+              | FUNCTION L_PAREN param_list_opt R_PAREN COLON type block
+              | FUNCTION L_PAREN param_list_opt R_PAREN TYPE_ARROW expr
+              | FUNCTION L_PAREN param_list_opt R_PAREN COLON type TYPE_ARROW expr
 
 global_call : IDENTIFIER L_PAREN arg_list_opt R_PAREN
 
@@ -257,8 +268,8 @@ index_access : access_base L_SQUARE_BRACK expr R_SQUARE_BRACK
 
 new_expr : NEW IDENTIFIER L_PAREN arg_list_opt R_PAREN
 
-lambda_expr : L_PAREN param_list_opt R_PAREN ARROW expr
-            | L_PAREN param_list_opt R_PAREN COLON type ARROW expr
+lambda_expr : L_PAREN param_list_opt R_PAREN TYPE_ARROW expr
+            | L_PAREN param_list_opt R_PAREN COLON type TYPE_ARROW expr
 
 vector_expr : L_SQUARE_BRACK R_SQUARE_BRACK
             | L_SQUARE_BRACK vector_items R_SQUARE_BRACK

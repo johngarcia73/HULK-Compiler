@@ -1087,7 +1087,7 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
     Type* left = node.left ? coerceUnknown(node.left->accept(*this)) : UnknownType::instance();
     Type* right = node.right ? coerceUnknown(node.right->accept(*this)) : UnknownType::instance();
 
-    if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/" || node.op == "%") {
+    if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/" || node.op == "%" || node.op == "^") {
         refineUnknownExpression(node.left, NumberType::instance());
         refineUnknownExpression(node.right, NumberType::instance());
         left = node.left ? coerceUnknown(node.left->accept(*this)) : UnknownType::instance();
@@ -1162,10 +1162,17 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
         return node.type;
     }
 
-    if (node.op == "@") {
+    if (node.op == "@" || node.op == "@@") {
         auto is_concat_operand = [](Type* type) {
             return type->equals(StringType::instance()) || isNumberType(type);
         };
+
+        // Refine unknown types to String to improve inference
+        refineUnknownExpression(node.left, StringType::instance(), false);
+        refineUnknownExpression(node.right, StringType::instance(), false);
+
+        Type* left = node.left ? coerceUnknown(node.left->accept(*this)) : UnknownType::instance();
+        Type* right = node.right ? coerceUnknown(node.right->accept(*this)) : UnknownType::instance();
 
         if (left->equals(UnknownType::instance()) || right->equals(UnknownType::instance())) {
             node.type = UnknownType::instance();
@@ -1176,7 +1183,7 @@ Type* TypeInferenceVisitor::visit(BinaryOpNode& node) {
             error(
                 SemanticPhase::Inference,
                 node,
-                "Operator '@' requires String or Number operands.",
+                "Operator '" + node.op + "' requires String or Number operands.",
                 {"Left operand: " + left->toString(), "Right operand: " + right->toString()});
         }
         node.type = StringType::instance();
@@ -1281,6 +1288,23 @@ Type* TypeInferenceVisitor::visit(AssignmentNode& node) {
         return node.type;
     }
 
+    if (isNumberType(targetType) && isNumberType(valueType)) {
+        Type* common = commonNumberType(targetType, valueType);
+        if (common && !common->equals(targetType)) {
+            if (auto* variable = dynamic_cast<VariableNode*>(node.target)) {
+                SymbolInfo* symbol = symTable.lookup(variable->name);
+                if (symbol && symbol->type) {
+                    symbol->type = common;
+                    traceInference(
+                        "Assignment refined '" + variable->name + "' to " + common->toString() +
+                        " at " + safeSpanName(node.span));
+                }
+            }
+        }
+        node.type = valueType;
+        return node.type;
+    }
+    
     if (!targetType->equals(UnknownType::instance()) &&
         !valueType->equals(UnknownType::instance()) &&
         !typeRegistry.conforms(valueType, targetType)) {
@@ -1309,7 +1333,6 @@ Type* TypeInferenceVisitor::visit(AssignmentNode& node) {
     node.type = valueType;
     return node.type;
 }
-
 Type* TypeInferenceVisitor::visit(MemberAccessNode& node) {
     if (collecting) {
         if (collectingDependencies && node.base) {
@@ -1321,11 +1344,26 @@ Type* TypeInferenceVisitor::visit(MemberAccessNode& node) {
     Type* baseType = node.base ? coerceUnknown(node.base->accept(*this)) : UnknownType::instance();
     const RegisteredAttribute* attribute = typeRegistry.findDeclaredAttribute(baseType, node.member);
     if (attribute) {
-        if (!currentMethod || currentOwnerTypeName != attribute->ownerTypeName) {
+        bool canAccess = false;
+        if (currentMethod) {
+            // If current method belongs to the same type which declared the attribute
+            if (currentOwnerTypeName == attribute->ownerTypeName) {
+                canAccess = true;
+            } else {
+                // Vrify if currentOwnerTypeName is subtype of attribute->ownerTypeName (Protected approach)
+                Type* currentType = typeRegistry.resolveTypeName(currentOwnerTypeName);
+                Type* ownerType = typeRegistry.resolveTypeName(attribute->ownerTypeName);
+                if (currentType && ownerType && typeRegistry.conforms(currentType, ownerType)) {
+                    canAccess = true;
+                }
+            }
+        }
+        if (!canAccess) {
             error(
                 SemanticPhase::Inference,
                 node,
-                "Attribute '" + node.member + "' is private to type '" + attribute->ownerTypeName + "'.");
+                "Attribute '" + node.member + "' is private to type '" + attribute->ownerTypeName + "'.",
+                {"Access from type '" + currentOwnerTypeName + "' is not allowed."});
         }
         node.type = coerceUnknown(attribute->type);
         return node.type;
