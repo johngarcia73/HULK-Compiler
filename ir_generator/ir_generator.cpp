@@ -370,7 +370,6 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
                 rightName);
         }
     } 
-    
     else if (node.op == "@") 
     {   //Add code for conert to string
         int typeFlag = TypeUtils::getRuntimeFlag(node.left->type); 
@@ -428,7 +427,7 @@ Type* IrGenerator::visit(BinaryOpNode& node) {
         typeForCurrentExpression = TypeUtils::toQbeType(node.type);
         codeBuilder.addLine("%{} = {} div %{}, %{}", nameForCurrentExpression, typeForCurrentExpression, leftName, rightName);
     }
-    
+   
     return nullptr; 
 }
 Type* IrGenerator::visit(ExprStmtNode& node) { 

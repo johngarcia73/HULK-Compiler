@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <gc.h>
+#include <math.h>
 #include "hashmap.h"
 
 typedef enum{
@@ -196,4 +197,9 @@ char* _s_to_string(float value, TypeFlag type) {
     return _create_hulk_string(buffer, len);
 }
 
-
+double _pow(double base, double exp){
+    return pow(base,exp);
+}
+double _mod(double a, double b){
+    return fmod(a,b);
+}

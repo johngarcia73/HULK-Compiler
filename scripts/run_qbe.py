@@ -74,6 +74,7 @@ def compile_cc(sh: Shell, asm_path: str, out_bin: str, args: argparse.Namespace)
      # 2. Add source code files next (these create dependencies)
     if args.use_runtime:
         cc_args.append(os.path.join("runtime", "runtime.c"))
+        cc_args.append("-lm")
     cc_args.extend(args.link_c_file)
     
     # 3. Add static libraries / objects LAST (these resolve dependencies)

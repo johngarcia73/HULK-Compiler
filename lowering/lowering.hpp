@@ -1,12 +1,10 @@
 #pragma once
 #include "../semantic/visitor.hpp"
 
-namespace lowering {
-
 class LoweringVisitor : public Visitor {
 public:
     virtual ~LoweringVisitor() = default;
-
+    ASTNodePtr* parentReference=nullptr;
     Type* visit(ProgramNode& node) override;
     Type* visit(BlockNode& node) override;
     Type* visit(FunctionDeclNode& node) override;
@@ -39,4 +37,3 @@ public:
     Type* visit(IndexAccessNode& node) override;
 };
 
-} // namespace lowering

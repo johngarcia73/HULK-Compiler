@@ -1,5 +1,6 @@
 #include "compiler/frontend_pipeline.hpp"
 #include "ir_generator/ir_generator.hpp"
+#include "lowering/lowering.hpp"
 #include "CLI11.hpp"          // <-- add this
 #include <cstdlib>
 #include <iostream>
@@ -60,8 +61,12 @@ int main(int argc, char** argv) {
       
     }
 
-    // ----- IR generation -----
+
     ProgramNode* ast = frontend.ast;
+    //Lowering stub
+    LoweringVisitor lowering;
+    ast->accept(lowering);
+    // ----- IR generation -----
     IrGenerator ir_generator;
     std::string qbe_ir = ir_generator.generate(ast);
 
@@ -96,7 +101,7 @@ int main(int argc, char** argv) {
     }
 
     // 3. Link with runtime and Boehm GC → final executable
-    std::string link_cmd = "cc " + obj_file + " runtime.o -Ldeps/bdwgc -lgc -lpthread -o " + output_exe;
+    std::string link_cmd = "cc " + obj_file + " runtime.o -Ldeps/bdwgc -lgc -lpthread -lm -o " + output_exe;
     if (run_command(link_cmd, verbose) != 0) {
         std::cerr << "Fatal: Linking failed.\n";
         return 4;
