@@ -203,3 +203,12 @@ double _pow(double base, double exp){
 double _mod(double a, double b){
     return fmod(a,b);
 }
+double _sqrt(double x){
+    return sqrt(x);
+}
+double _sin(double x){
+    return sin(x);
+}
+double _cos(double x){
+    return cos(x);
+}
