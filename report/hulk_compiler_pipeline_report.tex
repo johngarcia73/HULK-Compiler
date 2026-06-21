@@ -675,6 +675,10 @@ The semantic pipeline is orchestrated by the \texttt{SemanticAnalyzer} module an
 \section{Complete Semantic Analysis Pipeline}
 
 Semantic analysis is executed in a 5-stage pipeline that traverses the AST in two modes: collection (symbol and dependency registration) and analysis (inference and validation).
+A crucial design choice is the separation of collection and analysis. This two‑pass approach allows functions and types to reference each other freely without requiring a strict declaration order.
+ The first pass registers all symbols and builds the dependency graph;
+ the second pass performs the actual type inference using the gathered information.
+
 
 \begin{center}
 \begin{tabular}{c c}
@@ -693,6 +697,7 @@ Semantic analysis is executed in a 5-stage pipeline that traverses the AST in tw
 \subsubsection{Problem}
 Type analysis requires all declarations (types, protocols, functions) to be registered before their bodies are analyzed.
 In addition, functions must be analyzed in an order that respects dependencies (a function that calls another must be analyzed after the callee).
+The dependency graph addresses a fundamental challenge in type inference: a function's body cannot be accurately typed until the callees it invokes have been fully analyzed.
 
 \subsubsection{Solution: Collection-Mode Traversal}
 
@@ -772,7 +777,12 @@ the system imposes constraints that progressively narrow that type: for example,
 if it is used as an argument to a function that expects a \texttt{String}, it is refined to \texttt{String}.
 Refinement also acts on function parameters that do not have annotations: by analyzing the calls
 that they receive, the type of the actual arguments is propagated backward to fix the parameter type.
+\newline
 
+This refinement process is incremental. When a variable is first encountered, its type is Unknown. As the visitor traverses the body, each operation imposes a constraint—for example, an addition suggests Number, a comparison suggests Bool.
+ The symbol table is updated immediately, and subsequent uses of the variable benefit from the newly inferred type.
+  If contradictory constraints arise (e.g., a variable is used both as a Number and as a String), the system reports a type error with a clear
+ explanation of the conflict.
 \subsubsection{Result}
 Each function is annotated with the concrete types of its parameters and its return type.
 The \texttt{FunctionType} is updated in the symbol table and in the AST node.
@@ -840,6 +850,11 @@ Constraints are generated from:
 
 The language distinguishes between \texttt{Number} (generic) and \texttt{Number<kind>} (specific).
 When they are mixed, they are promoted to the widest common type through \texttt{commonNumberType}. For example, \texttt{Number<int>} $+$ \texttt{Number<double>} $\to$ \texttt{Number<double>};
+
+Furthermore, assignments can cause a variable's type to be generalised, not just refined. If a variable initially has a specific numeric type (e.g., Number<int>) and
+ is later assigned a value of a wider type (e.g., Number), the variable's type is promoted to the common supertype (Number in this case). This prevents spurious errors in patterns like sum := sum + f(i),
+  where sum started as Number<int> but f(i) returns generic Number.
+ The assignment rule is applied before the standard conformance check, making numeric types flexible while preserving safety.
 \texttt{Number<int>} $+$ \texttt{Number} $\to$ \texttt{Number}.
 
 In assignments, if a variable of a specific numeric type receives a value of a generic type, the variable's type is automatically generalized (e.g., \texttt{sum := sum + f(i)} converts \texttt{sum} from \texttt{Number<int>} to \texttt{Number}).

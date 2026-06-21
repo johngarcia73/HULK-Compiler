@@ -1,9 +1,9 @@
-This is XeTeX, Version 3.141592653-2.6-0.999995 (TeX Live 2023) (preloaded format=xelatex 2026.5.16)  21 JUN 2026 14:53
+This is XeTeX, Version 3.141592653-2.6-0.999995 (TeX Live 2023) (preloaded format=xelatex 2026.5.16)  21 JUN 2026 19:38
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
-**/home/johngarcia/John/Projects/Compilers/Compiler/overview/hulk_compiler_pipeline_report
-(/home/johngarcia/John/Projects/Compilers/Compiler/overview/hulk_compiler_pipeline_report.tex
+**/home/johngarcia/John/Projects/Compilers/Compiler/report/hulk_compiler_pipeline_report
+(/home/johngarcia/John/Projects/Compilers/Compiler/report/hulk_compiler_pipeline_report.tex
 LaTeX2e <2022-11-01> patch level 1
 L3 programming layer <2023-02-22> (/usr/share/texlive/texmf-dist/tex/latex/base/report.cls
 Document Class: report 2022/07/02 v1.4n Standard LaTeX document class
@@ -612,44 +612,44 @@ LaTeX Font Info:    ... okay on input line 44.
 
 \c@lstlisting=\count321
 Package hyperref Info: Link coloring OFF on input line 44.
+(./hulk_compiler_pipeline_report.out) (./hulk_compiler_pipeline_report.out)
 \@outlinefile=\write4
 \openout4 = `hulk_compiler_pipeline_report.out'.
 
-[1
+ [1
 
-]
-No file hulk_compiler_pipeline_report.toc.
+] (./hulk_compiler_pipeline_report.toc [1
+
+])
 \tf@toc=\write5
 \openout5 = `hulk_compiler_pipeline_report.toc'.
 
-[1
-
-]
+ [2]
 Chapter 1.
-[2
+[3
 
 ]
 Chapter 2.
-[3
+[4
 
-] [4]
+] [5]
 Chapter 3.
-[5
+[6
 
-] [6] [7]
+] [7] [8]
 Overfull \hbox (338.16147pt too wide) in paragraph at lines 354--358
 \TU/lmr/m/n/12 precedence over generic identifiers. =================================================================== 
  []
 
-[8] [9]
+[9] [10]
 Chapter 4.
 
 LaTeX Font Warning: Font shape `TU/lmr/bx/sc' undefined
 (Font)              using `TU/lmr/bx/n' instead on input line 441.
 
-[10
+[11
 
-] [11] [12] [13]
+] [12] [13] [14]
 Overfull \hbox (19.36842pt too wide) in paragraph at lines 575--576
 []\TU/lmr/m/n/12 The appropriate AST nodes are created (for example, \TU/lmtt/m/n/12 NumberNode\TU/lmr/m/n/12 , \TU/lmtt/m/n/12 BinaryOpNode\TU/lmr/m/n/12 ,
  []
@@ -669,67 +669,66 @@ Overfull \hbox (284.82944pt too wide) in paragraph at lines 584--587
 \TU/lmr/m/n/12 with operator \TU/lmtt/m/n/12 "+" \TU/lmr/m/n/12 and those children. For the production [][]\TU/lmtt/m/n/12 function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN block[]\TU/lmr/m/n/12 ,
  []
 
-[14] [15] [16]
+[15] [16] [17]
 Chapter 5.
 LaTeX Font Info:    Font shape `TU/lmtt/bx/n' in size <12> not available
 (Font)              Font shape `TU/lmtt/b/n' tried instead on input line 667.
 
-Overfull \hbox (11.56017pt too wide) in paragraph at lines 680--689
+Overfull \hbox (11.56017pt too wide) in paragraph at lines 684--693
  [] 
  []
 
-[17
+[18
 
 ]
-Overfull \hbox (32.77084pt too wide) in paragraph at lines 699--701
+Overfull \hbox (32.77084pt too wide) in paragraph at lines 704--706
 \TU/lmr/m/n/12 The visitor traverses the AST with the flags \TU/lmtt/m/n/12 collecting = true \TU/lmr/m/n/12 and \TU/lmtt/m/n/12 collectingDependencies
  []
 
 
-Overfull \hbox (28.25615pt too wide) in paragraph at lines 703--705
+Overfull \hbox (28.25615pt too wide) in paragraph at lines 708--710
 []\TU/lmr/m/n/12 All types and protocols are registered in \TU/lmtt/m/n/12 NominalTypeRegistry \TU/lmr/m/n/12 through \TU/lmtt/m/n/12 registerType()
  []
 
-[18]
-Overfull \hbox (19.10147pt too wide) in paragraph at lines 759--761
+[19]
+Overfull \hbox (19.10147pt too wide) in paragraph at lines 764--766
 \TU/lmtt/m/n/12 captureFunctionParameterTypes()\TU/lmr/m/n/12 . If any unannotated parameter remains \TU/lmtt/m/n/12 Unknown\TU/lmr/m/n/12 ,
  []
 
-[19]
-Overfull \hbox (4.48814pt too wide) in paragraph at lines 796--798
-[]\TU/lmr/m/n/12 Analyzes each method by running the same function-analysis process (with \TU/lmtt/m/n/12 isMethod
+
+Underfull \hbox (badness 10000) in paragraph at lines 770--781
+
  []
 
 [20]
-Overfull \hbox (5.94495pt too wide) in paragraph at lines 841--844
-\TU/lmr/m/n/12 they are mixed, they are promoted to the widest common type through \TU/lmtt/m/n/12 commonNumberType\TU/lmr/m/n/12 .
+Overfull \hbox (4.48814pt too wide) in paragraph at lines 806--808
+[]\TU/lmr/m/n/12 Analyzes each method by running the same function-analysis process (with \TU/lmtt/m/n/12 isMethod
  []
 
 [21]
-Overfull \hbox (43.72815pt too wide) in paragraph at lines 874--876
+Overfull \hbox (5.94495pt too wide) in paragraph at lines 851--853
+\TU/lmr/m/n/12 they are mixed, they are promoted to the widest common type through \TU/lmtt/m/n/12 commonNumberType\TU/lmr/m/n/12 .
+ []
+
+[22]
+Overfull \hbox (43.72815pt too wide) in paragraph at lines 889--891
 \TU/lmr/m/n/12 Conformity (subtyping) is defined through \TU/lmtt/m/n/12 typeConforms \TU/lmr/m/n/12 and \TU/lmtt/m/n/12 NominalTypeRegistry::conforms\TU/lmr/m/n/12 .
  []
 
-[22] (./hulk_compiler_pipeline_report.aux)
+[23] (./hulk_compiler_pipeline_report.aux)
 
 LaTeX Font Warning: Some font shapes were not available, defaults substituted.
 
-
-Package rerunfilecheck Warning: File `hulk_compiler_pipeline_report.out' has changed.
-(rerunfilecheck)                Rerun to get outlines right
-(rerunfilecheck)                or use package `bookmark'.
-
-Package rerunfilecheck Info: Checksums for `hulk_compiler_pipeline_report.out':
-(rerunfilecheck)             Before: <no file>
-(rerunfilecheck)             After:  45D9EA4B4EBD37D103F74872D95A15EB;10736.
+Package rerunfilecheck Info: File `hulk_compiler_pipeline_report.out' has not changed.
+(rerunfilecheck)             Checksum: 45D9EA4B4EBD37D103F74872D95A15EB;10736.
  ) 
 Here is how much of TeX's memory you used:
- 24673 strings out of 478682
- 485236 string characters out of 5849006
+ 24693 strings out of 478682
+ 485595 string characters out of 5849006
  1858018 words of memory out of 6000000
- 44368 multiletter control sequences out of 15000+600000
+ 44382 multiletter control sequences out of 15000+600000
  517357 words of font info for 69 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
- 84i,11n,80p,495b,779s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 84i,11n,80p,493b,779s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on hulk_compiler_pipeline_report.pdf (23 pages).
+Output written on hulk_compiler_pipeline_report.pdf (24 pages).
