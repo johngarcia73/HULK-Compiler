@@ -22,6 +22,7 @@ Type* LoweringVisitor::visit(BlockNode& node) {
 }
 
 Type* LoweringVisitor::visit(FunctionDeclNode& node) {
+    auto parentRefCopy = parentReference;
     if (node.body) {
         parentReference = &node.body;
         node.body->accept(*this);
@@ -30,6 +31,15 @@ Type* LoweringVisitor::visit(FunctionDeclNode& node) {
         parentReference = &node.exprBody;
         node.exprBody->accept(*this);
     }
+    if(!node.isInline){
+        auto funcDeclNode = new FunctionDeclNode(node.name,node.params, node.paramTypes,
+                     node.returnType, node.body, true);
+        funcDeclNode->isMethod = node.isMethod;
+        funcDeclNode->ownerTypeName = node.ownerTypeName;
+        funcDeclNode->type = node.type;
+        *parentRefCopy = funcDeclNode;
+    }
+    
     return nullptr;
 }
 
@@ -205,9 +215,13 @@ Type* LoweringVisitor::visit(ForNode& node) {
         node.body->accept(*this);
     }
     std::vector<ASTNodePtr> emptyVec;
-    auto whileCond = new FunctionCallNode("next",emptyVec,node.iterable);
+    auto iterableVarCond = new VariableNode("iterable");
+    iterableVarCond->type = node.iterable->type;
+    auto whileCond = new FunctionCallNode("next",emptyVec,iterableVarCond);
     whileCond->type = BoolType::instance();
-    auto currentCall =new FunctionCallNode("current",emptyVec);
+    auto iterableVarCurrent = new VariableNode("iterable");
+    iterableVarCurrent->type = node.iterable->type;
+    auto currentCall =new FunctionCallNode("current",emptyVec,iterableVarCurrent);
     currentCall->type = node.type;
     ASTNodePtr whileBody = new LetNode(node.iterator,currentCall,node.body);
     whileBody->type = node.type;
@@ -217,7 +231,9 @@ Type* LoweringVisitor::visit(ForNode& node) {
     whileBody->type = node.type;
     ASTNodePtr whileNode =new WhileNode(whileCond,whileBody);
     whileNode->type = node.type; 
-    *parentRefCopy= whileNode;
+    ASTNodePtr letIterableNode = new LetNode("iterable", node.iterable, whileNode);
+    letIterableNode->type = node.type;
+    *parentRefCopy= letIterableNode;
     return nullptr;
 }
 

@@ -1,6 +1,7 @@
-interface Comparable {
+protocol Comparable {
     value(): Number;
 }
+
 
 type Temperature(deg: Number) {
     deg: Number = deg;

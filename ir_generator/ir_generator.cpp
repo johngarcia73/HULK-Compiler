@@ -731,13 +731,9 @@ Type* IrGenerator::visit(FunctionDeclNode& node)
     codeBuilder.addLine("@start");
     codeBuilder.indent();
 
-    if (node.isInline && node.exprBody) 
-    {
-        node.exprBody->accept(*this);
-    } else if (node.body) {
-        node.body->accept(*this);
-    }
-    if(node.returnType == VoidType::instance())
+    node.exprBody->accept(*this);
+    
+    if(dynamic_cast<VoidType*>(node.returnType))
     {
         codeBuilder.addLine("ret 0");
     }

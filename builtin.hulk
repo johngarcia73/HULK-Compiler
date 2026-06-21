@@ -9,6 +9,4 @@ type Range(min:Number,max:Number){
     next():Boolean => (self.curr := self.curr+1)<self.max;
     current():Number => self.curr;
 }
-function range(min:Number,max:Number):Range{
-    return new Range(min,max);
-}
+function range(min:Number,max:Number):Range=> new Range(min,max);
