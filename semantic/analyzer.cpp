@@ -76,6 +76,7 @@ void SemanticAnalyzer::refreshLegacyErrors() {
     }
 }
 
+
 SemanticAnalysisResult SemanticAnalyzer::analyze(
     ProgramNode* root,
     SemanticDebugOptions options) {

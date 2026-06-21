@@ -248,6 +248,17 @@ class NominalTypeRegistry {
             if (auto* actualVector = asVectorType(actual)) {
                 return conformsImpl(actualVector->elementType(), expectedIterable->elementType(), seen);
             }
+            
+            if (auto* actualNominal = asNominalType(actual)) {
+                const RegisteredMethod* nextMethod = findMethod(const_cast<Type*>(actual), "next");
+                const RegisteredMethod* currentMethod = findMethod(const_cast<Type*>(actual), "current");
+                if (nextMethod && currentMethod &&
+                    nextMethod->type->getParamTypes().empty() &&
+                    conformsImpl(nextMethod->type->getReturnType(), BoolType::instance(), seen) &&
+                    conformsImpl(currentMethod->type->getReturnType(), expectedIterable->elementType(), seen)) {
+                    return true;
+                }
+            }
         }
         if (auto* expectedEnumerable = asEnumerableType(expected)) {
             if (auto* actualEnumerable = asEnumerableType(actual)) {
