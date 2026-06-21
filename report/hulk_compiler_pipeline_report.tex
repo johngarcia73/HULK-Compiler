@@ -1,0 +1,890 @@
+\documentclass[12pt,a4paper]{report}
+% \usepackage[utf8]{inputenc} % Commented out to avoid conflicts with XeLaTeX
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath} % Required to correctly render mathematical symbols
+\usepackage{tikz}
+\usepackage{hyperref}
+\usepackage{float}
+\usetikzlibrary{shapes,arrows,positioning,calc}
+
+\setlength{\headheight}{15pt}
+
+\tikzset{
+    block/.style={
+        rectangle,
+        draw,
+        rounded corners,
+        align=center,
+        text width=3cm,
+        minimum height=1cm,
+        font=\small % Added to prevent text overflow inside blocks
+    }
+}
+
+\geometry{margin=1in}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\thepage}
+\lhead{Hulk Compiler}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\title{
+    \textbf{Final Report of the Hulk Compiler Project} \\
+    \large A Modern Compiler for the Hulk Programming Language
+}
+\author{}
+\date{\today}
+
+\begin{document}
+
+% ============================================================================
+% COVER PAGE
+% ============================================================================
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    
+    {\scshape\Large University of Havana \par}
+    \vspace{0.5cm}
+    {\scshape Faculty of Mathematics and Computer Science \par}
+    
+    \vspace{2cm}
+    
+    {\Huge\bfseries Hulk Compiler \par}
+    \vspace{0.5cm}
+    {\Large A Modern Compiler \par}
+    
+    \vspace{3cm}
+    
+    {\Large Final Technical Project Report \par}
+
+    \vspace{1.5cm}
+
+    {\large
+    John García Muñoz C-312 \par
+    }
+
+    \vspace{1.5cm}
+    
+    {\large June 2026 \par}
+  
+    \vfill
+    
+    {\large\itshape ``Compilation is the art of translating human intentions\\
+    into instructions that machines can understand'' \par}
+    
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ============================================================================
+% INTRODUCTION
+% ============================================================================
+\chapter{Introduction}
+
+The Hulk compiler is a comprehensive computer science and software engineering project that implements a production-grade compiler for a modern programming language called Hulk (Havana University Language for Kompilers).
+
+\section{Motivation and Objectives}
+
+The purpose of this project is to develop a robust compilation system that demonstrates:
+
+\begin{itemize}
+    \item \textbf{Automatic analyzer generation}: Implementation of declarative lexer and parser generators that reduce manual coding effort.
+    \item \textbf{Comprehensive semantic analysis}: A sophisticated analysis system capable of detecting type errors, resolving dependencies among functions, and validating program semantics.
+    \item \textbf{Efficient cache management}: A frontend caching system that optimizes iterative compilations.
+    \item \textbf{Modular infrastructure}: Decoupled components that facilitate future extensions.
+\end{itemize}
+
+\section{Document Structure}
+
+This report presents:
+\begin{enumerate}
+    \item The overall compiler architecture
+    \item The design and automatic generation of the lexical analyzer
+    \item The design and automatic generation of the LALR(1) parser
+    \item A conceptual review of the language grammar
+    \item Semantic analysis and type resolution
+\end{enumerate}
+
+% ============================================================================
+% CHAPTER: ARCHITECTURE
+% ============================================================================
+\chapter{Compiler Architecture}
+
+\section{Overview}
+
+The Hulk compiler follows a three-phase pipeline architecture that processes source code sequentially:
+
+\begin{center}
+% Modified to a U-shaped layout to prevent overlap and overflow
+\begin{tikzpicture}[node distance=0.8cm and 0.5cm, auto]
+    \node (source) [block] {Source Code};
+    \node (lexer) [block, right=of source] {Lexical Analysis};
+    \node (parser) [block, right=of lexer] {Syntactic Analysis};
+    \node (semantic) [block, right=of parser] {Semantic Analysis};
+    \node (ir) [block, below=of semantic, yshift=-0.2cm] {Intermediate Representation};
+    
+    \draw [->] (source) -- (lexer);
+    \draw [->] (lexer) -- (parser);
+    \draw [->] (parser) -- (semantic);
+    \draw [->] (semantic) -- (ir);
+    
+    \node (builtin) [block, above=of lexer, dashed] {Builtin Code};
+    \draw [->] (builtin) -- (lexer);
+\end{tikzpicture}
+\end{center}
+
+The user's input source code is concatenated with a \texttt{builtin.hulk} file that defines core protocols and system functions.
+This combined code then flows through the compilation pipeline.
+
+\subsection{Main Components}
+
+\subsubsection{Frontend Pipeline}
+
+Orchestrates the first three compilation phases.
+Implements caching strategies to avoid recomputing analyses for grammars that have not changed.
+
+\subsubsection{Analyzer Generators}
+
+\begin{itemize}
+    \item \textbf{Lexer Generator}: Converts token specifications into an efficient lexical analyzer.
+    \item \textbf{Parser Generator}: Implements an LALR(1) generator that builds parsing tables from a BNF grammar.
+\end{itemize}
+
+\subsubsection{Semantic Analyzer}
+
+Performs type checking, name resolution, dependency analysis, and validation of the language's semantic constructs.
+
+\section{Data Flow}
+
+The compiler's data flow is unidirectional:
+
+\begin{enumerate}
+    \item \textbf{Input}: Source file + builtin code
+    \item \textbf{Lexer}: Tokenizes the combined text
+    \item \textbf{Parser}: Builds the Abstract Syntax Tree (AST)
+    \item \textbf{Semantic Analysis}: Collects declarations, resolves dependencies, infers types, and validates them
+\end{enumerate}
+
+\section{Error Handling}
+
+The compiler implements a hierarchical error system:
+
+\begin{itemize}
+    \item \textbf{Lexical Errors}: Invalid characters, malformed strings.
+    \item \textbf{Syntactic Errors}: Unexpected symbols, invalid grammatical constructs.
+    \item \textbf{Semantic Errors}: Incompatible types, undefined names.
+\end{itemize}
+
+Each error is reported precisely, including line number, column, and contextual information.
+% ============================================================================
+% CAPÍTULO: GENERADOR DE LÉXER
+% ============================================================================
+\chapter{Lexical Analysis and Lexer Generation}
+
+\section{Purpose and Responsibilities}
+
+Lexical analysis transforms a sequence of characters into a sequence of tokens.
+Tokens represent significant units of the language: keywords, identifiers, operators, and literals.
+The Hulk compiler implements an automatic lexer generator that converts regular-expression specifications into highly efficient deterministic finite automata.
+
+\section{Token Specification}
+
+Tokens are defined through declarative specifications that include:
+
+% \texttt was changed to \verb to avoid errors with underscores and backslashes
+\begin{itemize}
+    \item Reserved keywords (\texttt{function}, \texttt{type}, \texttt{protocol}, etc.)
+    \item Identifiers (patterns: \verb|[a-zA-Z_][a-zA-Z0-9_]*|)
+    \item Numeric literals (integers and decimals: \verb|[0-9]+(\.[0-9]+)?|)
+    \item String literals (between double quotes, with escaping)
+    \item Operators with specific patterns
+    \item Special symbols
+\end{itemize}
+
+Each token specification includes:
+\begin{itemize}
+    \item \textbf{Type name}: Unique token identifier.
+    \item \textbf{Regular expression}: Pattern that the token must match.
+    \item \textbf{Priority}: Precedence order when multiple patterns match.
+\end{itemize}
+
+% ============================================================================
+% SECTION: COMPLETE LEXER GENERATOR PIPELINE
+% ============================================================================
+\section{Complete Lexer Generator Pipeline}
+
+The lexer generator implements a 5-stage transformation pipeline that converts regular-expression specifications into a compiled DFA:
+
+\begin{center}
+% Modified to U-shaped layout
+\begin{tikzpicture}[node distance=0.8cm and 0.6cm, auto]
+    \node (specs) [block] {Token\\Specifications};
+    \node (infix) [block, right=of specs] {Infix to\\Postfix};
+    \node (thompson) [block, right=of infix] {Thompson:\\Infix $\to$ NFA};
+    \node (union) [block, below=of thompson, yshift=-0.2cm] {Merge\\NFAs};
+    \node (dfa) [block, left=of union] {Subset Constr.:\\NFA $\to$ DFA};
+    \node (lexer) [block, left=of dfa] {Compiled\\DFA};
+    
+    \draw [->] (specs) -- (infix);
+    \draw [->] (infix) -- (thompson);
+    \draw [->] (thompson) -- (union);
+    \draw [->] (union) -- (dfa);
+    \draw [->] (dfa) -- (lexer);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Stage 1: Infix-to-Postfix Conversion}
+
+\subsubsection{Problem}
+Natural regular expressions use infix notation (e.g., \verb|a*|b+|).
+Automaton-construction algorithms work more efficiently with postfix notation, where operators appear after their operands (reverse Polish notation).
+
+\subsubsection{Solution: Modified Shunting Yard Algorithm}
+
+For this purpose, the compiler implements a modified version of Dijkstra's Shunting Yard algorithm
+
+
+\subsection{Stage 2: NFA Construction Using Thompson's Algorithm}
+
+\subsubsection{Theoretical Basis}
+
+Thompson's Algorithm is a classic method that builds a Non-deterministic Finite Automaton (NFA) from a regular expression.
+The idea behind the algorithm is:
+\begin{itemize}
+    \item Each regular expression $e$ corresponds to an NFA with exactly one start state and one accepting state.
+    \item NFAs are built compositionally: operators create new NFAs by combining smaller NFAs.
+\end{itemize}
+
+
+\subsection{Stage 3: Merging Multiple NFAs}
+
+Since the lexer specifies multiple token patterns (one per token type), all individual NFAs must be combined into a single NFA that recognizes the union of all patterns.
+
+\subsubsection{Algorithm}
+
+\begin{enumerate}
+    \item Create a new start state $s_0$.
+    \item For each individual NFA with start state $s_i$:
+    \begin{itemize}
+        \item Copy the NFA, increasing all state identifiers (offset) to avoid collisions.
+        \item Add an $\epsilon$ transition from $s_0$ to the start state of the copy.
+    \end{itemize}
+    \item Group all accepting states of the individual NFAs into the accepting-state set of the unified NFA.
+    \item Preserve the information indicating which token type corresponds to each accepting state.
+\end{enumerate}
+
+\subsubsection{Result}
+
+The unified NFA recognizes any pattern defined by any of the tokens and propagates token-type information through accepting states.
+
+\subsection{Stage 4: NFA to DFA Conversion (Subset Construction)}
+
+\subsubsection{Problem}
+
+The NFA has non-deterministic transitions (including $\epsilon$ transitions).
+During NFA simulation, after reading a symbol, the automaton may be in multiple states simultaneously.
+This requires depth-first search or parallel simulation, which is inefficient for high-performance lexing.
+The solution is to convert the NFA into a DFA (Deterministic Finite Automaton), where each state represents a set of NFA states and transitions are deterministic.
+
+\subsubsection{Algorithm: Subset Construction}
+The subset construction algorithm transforms an NFA into an equivalent DFA by simulating
+all possible sets of NFA states as DFA states.
+It begins by computing the $\epsilon$-closure of the NFA's initial state,
+which includes all states reachable through $\epsilon$ transitions, and turns it into the initial DFA state.
+Then, for each unprocessed DFA state (a set of NFA states), the move function is computed for each symbol
+in the alphabet, obtaining the NFA states reachable by consuming that symbol, and the $\epsilon$-closure is applied again to
+close over $\epsilon$ transitions.
+The result of this process is another set of
+NFA states that, if it has not been seen before, becomes a new DFA state
+and is added to a processing queue.
+In addition, transitions are recorded from the current
+DFA state to the new state for each symbol.
+If any of the sets
+contains an NFA accepting state, the corresponding DFA state is marked as accepting, assigning it the appropriate token type (normally the one with the lowest priority).
+The algorithm repeats this process until all generated DFA states have been explored, producing a complete DFA with deterministic transitions.
+
+\subsubsection{Optimization: State Canonicalization}
+
+To avoid creating duplicate states, a hash map is used to map sets of NFA states to DFA states.
+The hash key is a consistent hash of the state set.
+
+\subsubsection{Advantages of the DFA}
+
+\begin{itemize}
+    \item Determinism: From any state and symbol, there is exactly one transition.
+    \item Runtime efficiency: Simulation in $O(|\text{text}|)$, one character $\to$ one transition.
+    \item Compilability: The transition table can be compiled into two-dimensional arrays.
+\end{itemize}
+
+% ============================================================================
+% SECTION: RUNTIME TOKENIZATION ALGORITHM
+% ============================================================================
+\section{Runtime Tokenization Algorithm}
+
+With the compiled DFA, tokenization is highly efficient:
+
+\begin{enumerate}
+    \item \textbf{Current state}: Initialize to the DFA start state.
+    \item \textbf{Lexeme buffer}: Initialize empty.
+    \item \textbf{Position tracking}: Maintain line and column.
+    \item \textbf{For each character in the input}:
+    \begin{itemize}
+        \item Query transition: $\text{next} = \text{transitions}[\text{state}][c]$.
+        \item If a transition exists: advance to the next state, append the character to the lexeme.
+        \item If no transition exists:
+        \begin{itemize}
+            \item If the current state is accepting: emit the token of the type registered in that state, reset.
+            \item If it is not accepting: lexical error at the current position.
+        \end{itemize}
+    \end{itemize}
+    
+    \item \textbf{At end of input}: Emit the last token if the current state is accepting.
+\end{enumerate}
+
+\subsubsection{Priority Handling}
+
+When multiple patterns match the same text, the compiler selects the first registered one (token-type ordering).
+This allows keywords to be defined as special tokens that take precedence over generic identifiers. ===================================================================
+% SECTION: CHALLENGES AND SOLUTIONS
+% ============================================================================
+\section{Resolved Challenges}
+
+\subsection{Problem: Keywords vs. Identifiers}
+
+\textbf{Solution}: Register keywords with higher priority than the generic identifier pattern.
+When the DFA reaches an accepting state, the lexer uses the token type with the lowest ID.
+Thus, the keyword \texttt{function}, registered first, has priority over the pattern \verb|[a-zA-Z]+|.
+
+\subsection{Problem: Ambiguous Numbers (Integers vs. Decimals)}
+
+\textbf{Solution}: Specify two patterns:
+\begin{itemize}
+    \item Decimal: \verb|[0-9]+\.[0-9]+|
+    \item Integer: \verb|[0-9]+|
+\end{itemize}
+
+Register decimal with higher priority.
+The DFA will prefer the longest match thanks to continuing as long as valid transitions exist.
+
+\subsection{Problem: Strings with Special Characters}
+
+\textbf{Solution}: Define a string pattern that includes escaping:
+\begin{itemize}
+    \item Pattern: \verb|"([^"\\]|\\.)*"|
+    \item It interprets any character between quotes except an unescaped quote, or an escape followed by any character.
+\end{itemize}
+
+\subsection{Problem: DFA Spatial Efficiency}
+
+\textbf{Solution}: In some cases the DFA may be large. The compiler implements:
+\begin{itemize}
+    \item \textbf{Sparse representation}: Store only existing transitions (maps/dicts).
+    \item \textbf{Compaction}: Detect and merge equivalent states (DFA minimization).
+\end{itemize}
+
+% ============================================================================
+% CAPÍTULO: ANÁLISIS SINTÁCTICO Y GENERACIÓN DEL PARSER
+% ============================================================================
+% ============================================================================
+% CHAPTER: SYNTACTIC ANALYSIS AND PARSER GENERATION
+% ============================================================================
+\chapter{Syntactic Analysis and Parser Generation}
+
+\section{Purpose and Responsibilities}
+
+Syntactic analysis is the compiler phase that verifies that the sequence of tokens provided by the lexical analyzer conforms to the language grammar and, from it, constructs an Abstract Syntax Tree (AST) that serves as input for the subsequent phases (semantic analysis and code generation).
+The Hulk compiler implements an LALR(1) parser generator that, starting from a declarative grammar specification (similar to Yacc/Bison), automatically builds the parsing tables and execution code.
+The main responsibilities of this module are:
+\begin{itemize}
+    \item Build the LALR(1) automaton from the grammar, including the computation of \textsc{First} and \textsc{Nullable} sets.
+    \item Generate the \textsc{Action} tables (for terminals) and \textsc{Goto} tables (for non-terminals) that guide the parser at runtime.
+    \item Detect and report conflicts (shift/reduce and reduce/reduce) so that the developer can resolve them.
+    \item Execute syntactic analysis over a sequence of tokens, applying reductions and building the AST through an associated \textit{builder}.
+\end{itemize}
+
+% ============================================================================
+% SECTION: COMPLETE PARSER GENERATOR PIPELINE
+% ============================================================================
+\section{Complete Parser Generator Pipeline}
+
+The parser generator follows a 5-stage pipeline, which transforms the grammar
+into an executable parser:
+
+\begin{center}
+% Modified to U-shaped layout
+\begin{tikzpicture}[node distance=0.8cm and 0.6cm, auto]
+    \node (grammar) [block] {LALR(1)\\Grammar};
+    \node (first) [block, right=of grammar] {First/Nullable\\Computation};
+    \node (canonical) [block, right=of first] {LR(1)\\Construction};
+    \node (lalr) [block, below=of canonical, yshift=-0.2cm] {LALR\\Merge};
+    \node (tables) [block, left=of lalr] {Table\\Generation};
+    \node (runtime) [block, left=of tables] {Executable\\Parser};
+    
+    \draw [->] (grammar) -- (first);
+    \draw [->] (first) -- (canonical);
+    \draw [->] (canonical) -- (lalr);
+    \draw [->] (lalr) -- (tables);
+    \draw [->] (tables) -- (runtime);
+\end{tikzpicture}
+\end{center}
+
+Each of these stages is detailed below.
+
+\subsection{Stage 1: Computation of \textsc{First} and \textsc{Nullable} Sets}
+
+\subsubsection{Problem}
+The construction of LR(1) states and the computation of lookahead sets require knowing,
+for each symbol sequence, the set of terminals that may appear
+in first position (\textsc{First}) and whether the sequence can derive the empty string (\textsc{Nullable}).
+These sets are the basis for the closure function and item generation.
+
+\subsubsection{Solution: Fixed-Point Iterative Algorithm}
+The compiler implements the standard algorithm for computing \textsc{First} and \textsc{Nullable}:
+
+\begin{enumerate}
+    \item Initialize \textsc{Nullable} to \texttt{false} for all non-terminal symbols.
+    \item Initialize \textsc{First} of each terminal with the terminal itself.
+    \item For each production $A \to X_1 X_2 \dots X_k$:
+        \begin{itemize}
+            \item If all the $X_i$ are \textsc{Nullable}, then $A$ is \textsc{Nullable}.
+            % Subscripts were corrected so they appear in math mode
+            \item \textsc{First}($A$) includes \textsc{First}($X_1$); if $X_1$ is \textsc{Nullable}, it also includes \textsc{First}($X_2$), and so on.
+        \end{itemize}
+    \item Repeat the process until no changes occur.
+\end{enumerate}
+
+These sets are stored in a \texttt{FirstResult} structure that is passed to the following stages.
+
+\subsection{Stage 2: Construction of the LR(1) Automaton}
+
+\subsubsection{Problem}
+The LALR(1) parser is based on a state automaton whose states represent sets of \textit{items} LR(1).
+An item is a production with a dot indicating the current parsing position, together with a set of lookahead terminals.
+The construction must generate all states reachable from the initial state through the closure function and the transition (\textit{goto}) operation.
+
+\subsubsection{Solution: Canonical LR(1) Construction Algorithm}
+The compiler implements the canonical construction of LR(1) item sets (Knuth's algorithm), which is carried out as follows:
+
+\begin{enumerate}
+    \item \textbf{Initial item}: Starting from the augmented production $S' \to S$ (added internally), the item $[S' \to \cdot S, \$]$ is created.
+    \item \textbf{Closure}: Given a set of items, all items reachable through $\epsilon$ transitions are added (that is,
+    when the dot is before a non-terminal, the productions of that non-terminal are added with lookaheads computed from \textsc{First} of the remaining sequence).
+    \item \textbf{Transition (\textit{goto})}: For a state and a symbol $X$, all items whose dot is before $X$ are obtained, the dot is advanced, and the closure of the result is computed.
+    \item \textbf{Canonicalization}: The process is repeated starting from the initial state, adding new states until no new item sets appear.
+    Each state is identified by its set of items (ignoring lookaheads) and assigned a unique identifier.
+\end{enumerate}
+
+The implementation in \texttt{lalr\_algorithms.cpp} uses a work queue and a fingerprint map to avoid duplicates.
+The fingerprint is computed by ordering items by (production, dot position, lookahead), which guarantees efficient identification.
+
+\subsection{Stage 3: LALR Merging}
+
+\subsubsection{Problem}
+The canonical LR(1) automaton can have a very large number of states, which makes the parsing tables large.
+The LALR(1) method reduces the size of the automaton by merging states that have the same \textit{core} (that is, the same items ignoring lookaheads), combining their lookahead sets.
+This merge is safe because any conflicts that might arise are already present in the original LR(1) automaton.
+
+\subsubsection{Solution: Grouping by Core}
+The \texttt{merge\_to\_lalr\_impl} function traverses all canonical LR(1) states and groups them according to their core
+(represented by a string encoding the pairs (production, dot position)).
+For each group,
+a new LALR state is created containing the union of all lookaheads of the corresponding items.
+Then, transitions are reassigned using the mapping from old states to new states.
+The result is a much more compact LALR(1) automaton that preserves the parsing power of the original LR(1).
+
+\subsection{Stage 4: Parsing Table Generation}
+
+\subsubsection{Problem}
+The LALR(1) automaton must be translated into two tables that guide the parser at runtime:
+\begin{itemize}
+    \item \textsc{Action}[state, terminal] $\to$ \{shift, reduce, accept, error\}
+    \item \textsc{Goto}[state, non-terminal] $\to$ next state
+\end{itemize}
+
+These tables are built from the automaton transitions and reduction items.
+
+\subsubsection{Solution: Table-Filling Algorithm}
+The \texttt{build\_tables} function performs the following steps:
+
+\begin{enumerate}
+    \item For each automaton transition whose destination is a terminal, a \textsc{Shift} action is added to the \textsc{Action} table.
+    \item For each transition whose destination is a non-terminal, an entry is added to the \textsc{Goto} table.
+    \item For each state, all its items are traversed. If an item has the dot at the end of the production (reduction item), a \textsc{Reduce} action is added for each lookahead of the item.
+    If the production is the augmented one and the lookahead is \$, \textsc{Accept} is added.
+    \item When an attempt is made to add an action to an already occupied cell, a conflict (shift/reduce or reduce/reduce) is recorded and stored in the conflict list.
+\end{enumerate}
+
+The result is the \textsc{Action} and \textsc{Goto} tables that will be used by the runtime parser.
+
+\subsection{Stage 5: Parser Execution and AST Construction}
+\subsubsection{Problem}
+At runtime, the parser must traverse the token sequence, consult the tables, and apply the corresponding actions (shift, reduce, accept)
+while maintaining a stack of states and a stack of semantic values.
+In addition, it must invoke the \textit{ast builder} to construct the AST as reductions are performed.
+
+\subsubsection{Solution: LR Parsing Algorithm}
+The executable parser implements the classic LR parsing algorithm:
+
+\begin{enumerate}
+    \item Initialize the state stack with state 0 and the value stack empty.
+    \item At each iteration:
+        \begin{itemize}
+            \item Obtain the current state (top of the state stack) and the current symbol (next token or \$ if there are no more tokens).
+            \item Consult the \textsc{Action} table to obtain the action associated with the pair (state, symbol).
+            \item If the action is \textsc{Shift}: consume the token, push the new state and the semantic value of the token (if provided).
+            \item If the action is \textsc{Reduce}: pop as many states as symbols are in the right-hand side of the production, obtain the resulting state, consult the \textsc{Goto} table for the non-terminal of the production, and push the new state.
+            In addition, the \textit{ast builder} is invoked with the production identifier and the list of semantic values from the right-hand side, and the result is pushed as the semantic value.
+            \item If the action is \textsc{Accept}: finish successfully, and the semantic value at the top of the stack is the root node of the AST.
+            \item If there is no action or it is \textsc{Error}: report a syntactic error with the token location.
+        \end{itemize}
+\end{enumerate}
+
+\subsection{AST Builder Integration}
+
+AST construction is delegated to an external \textit{builder} that the parser invokes during each reduction.
+This mechanism separates syntactic analysis logic from AST generation, making maintenance and evolution easier.
+
+\subsubsection{Builder Interface}
+The \textit{ast builder} (implemented in \texttt{ast\_builder.cpp}) exposes a single public method:
+\begin{verbatim}
+ASTNode* build(size_t prod_id, const std::vector<Value>& rhs);
+\end{verbatim}
+
+This method receives:
+\begin{itemize}
+    \item \texttt{prod\_id}: the identifier of the production being reduced.
+    \item \texttt{rhs}: the semantic values of the symbols on the right-hand side of the production (which may be AST nodes or tokens).
+\end{itemize}
+
+\subsubsection{Construction Process}
+The \textit{builder} uses the grammar and the production identifier to determine what kind of AST node should be created:
+
+\begin{enumerate}
+    \item For each production, a matching pattern (\texttt{match}) is defined that checks the name of the left-hand side and the names of the symbols on the right-hand side.
+    \item If the pattern matches, the corresponding construction code is executed:
+        \begin{itemize}
+            \item The semantic values of the right-hand-side symbols are accessed through macros such as \texttt{RHS(i)} or \texttt{TOKEN(i)}.
+            \item The appropriate AST nodes are created (for example, \texttt{NumberNode}, \texttt{BinaryOpNode}, \texttt{FunctionDeclNode}, etc.).
+            \item Spans (location in the source code) are assigned to the nodes using \texttt{attach\_span}.
+            \item The root node of the reduction is returned.
+        \end{itemize}
+    \item If no rule matches, a debugging message is emitted and \texttt{nullptr} is returned.
+\end{enumerate}
+
+\subsubsection{Construction Example}
+% Replaced the \char issue with a safe form
+For \texttt{additive : additive PLUS multiplicative}, it executes the macro \texttt{BIN\_OP(\char`\"+\char`\")} abstracting positions 0 and 2. For complex function declarations, it delegates to \texttt{build\_function\_like}, abstracting the identifier, parameters, and internal blocks.
+This macro extracts the nodes from the left and right sides of the RHS (at positions 0 and 2), and creates a \texttt{BinaryOpNode} with operator \texttt{"+"} and those children.
+For the production \verb|function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN block|, the \textit{builder} calls \texttt{build\_function\_like}, which extracts the name (position 1), the parameter list (position 3), and the body (position 5), and creates a \texttt{FunctionDeclNode}.
+
+\subsubsection{Advantages of This Approach}
+\begin{itemize}
+    \item \textbf{Separation of responsibilities}: The parser only handles the sequence of actions;
+    the \textit{builder} handles the semantics of AST construction.
+    \item \textbf{Extensibility}: Adding new productions only requires adding new patterns in the \textit{builder}, without modifying the parsing algorithm.
+    \item \textbf{Debugging}: Uncovered rules emit messages that help identify unimplemented productions.
+\end{itemize}
+
+% ============================================================================
+% SECTION: KEY ALGORITHMS
+% ============================================================================
+\section{Key Algorithms}
+
+\subsection{LR(1) Closure}
+
+The closure of a set of items is computed iteratively.
+For each item $[A \to \alpha \cdot B \beta, a]$ where $B$ is a non-terminal, the items $[B \to \cdot \gamma, b]$
+are added for each production $B \to \gamma$ and each $b \in \textsc{First}(\beta a)$.
+The algorithm is implemented in the \texttt{closure\_lr1} function, which uses a work queue to propagate new items and lookaheads.
+
+\subsection{Goto}
+
+Given a state and a symbol $X$, the \textit{goto} operation
+produces a new state containing all the items from the original state whose dot is before $X$, 
+advancing the dot one position, and then computing the closure.
+This operation is used to build the automaton transitions.
+
+\subsection{State Fingerprinting}
+
+To uniquely identify each LR(1) state and avoid duplicates, a \textit{fingerprint}
+ is generated from the items and their lookaheads, sorted canonically.
+This fingerprint is used as the key in a map that assigns fingerprints to state identifiers.
+
+\subsection{Conflict Resolution}
+
+When a conflict is found during table generation (two different actions for the same cell), 
+the compiler records it and reports it to the developer.
+The system does not attempt to resolve them automatically (except in very simple cases such as preference for shift in shift/reduce conflicts,
+ which is the usual convention).
+Instead, detailed information is provided (state, symbol, conflicting actions) so that the developer can modify the grammar.
+
+% ============================================================================
+% SECTION: RESOLVED CHALLENGES
+% ============================================================================
+\section{Resolved Challenges}
+
+\subsection{Integration with the Lexical Analyzer}
+The parser receives a sequence of tokens already classified by the lexer.
+For this purpose, each token includes its symbol identifier (which matches the grammar terminals), its textual value, and location information.
+During analysis, the parser consumes tokens sequentially and, if it encounters an error, can report the exact line and column.
+
+\subsection{Handling the \$ Symbol}
+The \$ symbol (end of input) is treated as a special terminal.
+An augmented production $S' \to S$ is added and
+ \$ is used as the lookahead for acceptance.
+The handling of \$ is integrated into table construction
+  (Accept action) and into the runtime parser (when no more tokens remain).
+
+\subsection{Table Efficiency}
+The \textsc{Action} and \textsc{Goto} tables are represented as vectors of maps (associative containers) to save space,
+ since most cells are empty.
+At runtime, map lookup is efficient
+  and allows grammars of moderate size to be handled without performance issues.
+
+% ============================================================================
+% CAPÍTULO: ANÁLISIS SEMÁNTICO Y PIPELINE DE INFERENCIA
+% ============================================================================
+% ============================================================================
+% CHAPTER: SEMANTIC ANALYSIS AND INFERENCE PIPELINE
+% ============================================================================
+\chapter{Semantic Analysis and Inference Pipeline}
+
+\section{Purpose and Responsibilities}
+
+Semantic analysis is the phase responsible for validating program correctness, resolving names and overloads, inferring types, and annotating the Abstract Syntax Tree (AST) with all the type information needed for code generation.
+This phase transforms a syntactically correct AST into a semantically validated AST, detecting errors such as undeclared variables, incompatible types, ambiguous overloads, or protocol contract violations.
+The semantic pipeline is orchestrated by the \texttt{SemanticAnalyzer} module and executed by the \texttt{TypeInferenceVisitor}, relying on three fundamental data structures:
+
+\begin{itemize}
+    \item \textbf{Symbol table (\texttt{SemanticSymbolTable})}: Stores nested scopes with variables, parameters, functions (with overloads), and the \texttt{self} symbol.
+    \item \textbf{Nominal type and protocol registry (\texttt{NominalTypeRegistry})}: Manages inheritance, attributes, methods, and constructors.
+    \item \textbf{Dependency graph (\texttt{DependencyGraph})}: Models calls between functions in order to analyze them topologically.
+\end{itemize}
+
+% ============================================================================
+% SECTION: COMPLETE SEMANTIC ANALYSIS PIPELINE
+% ============================================================================
+\section{Complete Semantic Analysis Pipeline}
+
+Semantic analysis is executed in a 5-stage pipeline that traverses the AST in two modes: collection (symbol and dependency registration) and analysis (inference and validation).
+
+\begin{center}
+\begin{tabular}{c c}
+\textbf{Stage} & \textbf{Main Action} \\
+\hline
+1. Declaration collection & Register types, protocols, functions, and dependencies \\
+2. Topological ordering & Order functions according to the dependency graph \\
+3. Function analysis & Infer the parameter and return types of each function \\
+4. Type analysis & Validate attributes, methods, and type constructors \\
+5. Global statement analysis & Infer the program type and verify standalone expressions \\
+\end{tabular}
+\end{center}
+
+\subsection{Stage 1: Declaration and Dependency Collection}
+
+\subsubsection{Problem}
+Type analysis requires all declarations (types, protocols, functions) to be registered before their bodies are analyzed.
+In addition, functions must be analyzed in an order that respects dependencies (a function that calls another must be analyzed after the callee).
+
+\subsubsection{Solution: Collection-Mode Traversal}
+
+The visitor traverses the AST with the flags \texttt{collecting = true} and \texttt{collectingDependencies = true}.
+During this traversal:
+
+\begin{enumerate}
+    \item All types and protocols are registered in \texttt{NominalTypeRegistry} through \texttt{registerType()} and \texttt{registerProtocol()}.
+    Each type stores its name, inheritance, constructor parameters, and an initial list of attributes and methods (not yet analyzed).
+    \item Each function declaration (\texttt{FunctionDeclNode}) creates a \texttt{FunctionType} (with parameters and return type possibly \texttt{Unknown}) and registers it in the symbol table (with overloads).
+    The node is added to the \texttt{pendingFunctions} list.
+    \item A node is added to the dependency graph with the function's AST, and the function body is traversed (if \texttt{collectingDependencies} is active) to detect calls to other functions.
+    Each call adds an edge to the graph.
+    \item Finally, \texttt{resolveParentsAndConstructors()} is invoked to resolve the parent type of each type, copy inherited attributes and methods, and validate constructor consistency (arity and types).
+\end{enumerate}
+
+\subsubsection{Result}
+At the end of this stage, the type registry contains all types and protocols with their hierarchy resolved, the symbol table contains all functions with their signatures (even if some types may still be \texttt{Unknown}), and the dependency graph models all calls between functions.
+
+\subsection{Stage 2: Topological Ordering of Functions}
+
+\subsubsection{Problem}
+For type inference to work correctly, functions must be analyzed in an order that guarantees that when one function calls another, the callee already has its types inferred.
+If a function is analyzed before its dependencies are ready, argument types may remain \texttt{Unknown}.
+
+\subsubsection{Solution: DFS Algorithm on the Dependency Graph}
+
+The dependency graph is topologically sorted by means of a depth-first search (DFS) that detects cycles.
+The algorithm is:
+
+\begin{enumerate}
+    \item Mark all nodes as unvisited.
+    \item For each unvisited node, perform DFS:
+    \begin{itemize}
+        \item Mark the node as visited and on the recursion stack.
+        \item For each neighbor (dependency), if it is not visited, call DFS recursively.
+        \item If the neighbor is already on the recursion stack, a cycle has been detected.
+        \item When finished, add the node to the topological order list (post-order).
+    \end{itemize}
+    \item Reverse the list to obtain the natural order (dependencies before dependents).
+\end{enumerate}
+
+If a cycle is detected, a warning is emitted and declaration order (the order in which nodes appear in the AST) is used as a fallback.
+
+\subsubsection{Result}
+An ordered list of functions is obtained that respects all direct dependencies,
+allowing sequential analysis without type conflicts.
+
+\subsection{Stage 3: Function Analysis}
+
+\subsubsection{Problem}
+Each function must be analyzed to infer the types of its parameters (if they are not annotated),
+the return type (if it is not declared), and to verify that internal expressions are consistent with those types.
+
+\subsubsection{Solution: Analysis-Mode Visitor}
+
+For each function, the visitor performs the following steps:
+
+\begin{enumerate}
+    \item Retrieves the \texttt{FunctionType} registered during collection.
+    \item Creates a scope for the function and, if it is a method, inserts \texttt{self} with the owner's type.
+    \item Creates a child scope for the parameters, inserting each parameter with the type it has in the signature (possibly \texttt{Unknown}).
+    \item Analyzes the function body (block or expression), which propagates constraints and refines (more on this below) the types of symbols.
+    \item After analysis, captures the final parameter types from the symbol table through \texttt{captureFunctionParameterTypes()}.
+    If any unannotated parameter remains \texttt{Unknown}, an error is emitted.
+    \item Updates the return type: if it was not declared, the actual type of the body is used;
+    if it was declared, conformity is checked.
+\end{enumerate}
+
+Refinement is the mechanism by which the semantic analyzer dynamically adjusts
+the types of variables and parameters as it discovers more information
+about their use in the program.
+When a variable is declared without an explicit annotation, its type is initially set
+to \texttt{Unknown};
+later, as it participates in operations (such as additions, comparisons, or function calls),
+the system imposes constraints that progressively narrow that type: for example, if it appears in an addition, it is refined to \texttt{Number};
+if it is used as an argument to a function that expects a \texttt{String}, it is refined to \texttt{String}.
+Refinement also acts on function parameters that do not have annotations: by analyzing the calls
+that they receive, the type of the actual arguments is propagated backward to fix the parameter type.
+
+\subsubsection{Result}
+Each function is annotated with the concrete types of its parameters and its return type.
+The \texttt{FunctionType} is updated in the symbol table and in the AST node.
+
+\subsection{Stage 4: Type Analysis}
+
+\subsubsection{Problem}
+The user-declared types (\texttt{type}) must be validated: attributes must have types compatible with their initializers,
+methods must be correct, and the parent's constructor must be invoked properly.
+
+\subsubsection{Solution: Sequential Attribute and Method Analysis}
+
+The visitor traverses each registered type and:
+
+\begin{enumerate}
+    \item Resolves the nominal type of the type if it is not already resolved.
+    \item If the type has explicit arguments for the parent constructor, validates arity and argument conformity in the context of the constructor parameters.
+    \item Analyzes each attribute: resolves the declared type (if any), infers the type of its initializer,
+    and checks conformity.
+    The type registry is updated with the final attribute type.
+    \item Analyzes each method by running the same function-analysis process (with \texttt{isMethod = true}),
+    which includes the insertion of \texttt{self}.
+\end{enumerate}
+
+\subsubsection{Result}
+All attributes and methods are annotated with their final types,
+and errors such as incompatible initializers or methods that do not respect the inherited signature are detected.
+
+\subsection{Stage 5: Global Statement Analysis}
+
+\subsubsection{Problem}
+The program may contain standalone expressions at the top level (e.g., blocks, \texttt{let} without a semicolon, function calls).
+These must also be typed and checked.
+
+\subsubsection{Solution}
+The visitor analyzes the program statements (\texttt{root->stmts}) in analysis mode, computing the type of each one and propagating constraints.
+The program type is the type of the last statement, or \texttt{Void} if there is none.
+
+% ============================================================================
+% SECTION: KEY ALGORITHMS
+% ============================================================================
+\section{Key Algorithms}
+
+\subsection{Constraint-Based Type Inference}
+
+The type inference system collects implicit constraints as expressions are visited.
+Each constraint relates a node (variable, parameter, lambda) with an expected type.
+When a constraint is encountered, \texttt{refineUnknownExpression()} is invoked,
+which updates the corresponding symbol if its current type is \texttt{Unknown}.
+If the symbol already has a concrete type and the new constraint is incompatible,
+an error is emitted.
+Constraints are generated from:
+
+% Signs $ and escaped codes were introduced so operators compile cleanly
+\begin{itemize}
+    \item Arithmetic operators ($+$, $-$, $*$, $/$, $\%$, $\wedge$): refine operands to \texttt{Number}.
+    \item Comparisons ($<$, $>$, $\le$, $\ge$): refine operands to \texttt{Number}.
+    \item Concatenation ($@$, $@@$): refine operands to \texttt{String} or \texttt{Number}.
+    \item Logical operators ($\&$, $|$, $!$): refine operands to \texttt{Bool}.
+    \item Function calls: each argument is refined to the type of the corresponding parameter of the selected overload.
+    \item Assignments: the right-hand side refines the type of the left-hand-side variable.
+\end{itemize}
+
+\subsubsection{Handling Generic vs. Specific Numbers}
+
+The language distinguishes between \texttt{Number} (generic) and \texttt{Number<kind>} (specific).
+When they are mixed, they are promoted to the widest common type through \texttt{commonNumberType}. For example, \texttt{Number<int>} $+$ \texttt{Number<double>} $\to$ \texttt{Number<double>};
+\texttt{Number<int>} $+$ \texttt{Number} $\to$ \texttt{Number}.
+
+In assignments, if a variable of a specific numeric type receives a value of a generic type, the variable's type is automatically generalized (e.g., \texttt{sum := sum + f(i)} converts \texttt{sum} from \texttt{Number<int>} to \texttt{Number}).
+
+\subsection{Overload Resolution}
+
+The overload resolution algorithm is implemented according to the following idea:
+
+\begin{enumerate}
+    \item Search the symbol by name.
+    If it does not exist, return \texttt{SymbolNotFound}. If it exists but is not a function, return \texttt{NotAFunction}.
+    \item For each overload (\texttt{FunctionType}):
+        \begin{itemize}
+            \item Compare arity.
+            If it differs, record the reason and continue.
+            \item If arity matches, check each argument against the corresponding parameter using the conformity function (\texttt{conforms}).
+            \item Compute a compatibility cost: 0 for exact match, 1 for inheritance-based conformity, 3 for \texttt{Any}, 4 for \texttt{Unknown}, 1000 for incompatibility.
+            \item If all arguments conform, the candidate is viable and its cost is stored.
+        \end{itemize}
+    \item Selection:
+        \begin{itemize}
+            \item If exactly one candidate has the lowest cost $\to$ it is selected and the status is \texttt{Resolved}.
+            \item If several candidates share the same minimum cost $\to$ status is \texttt{Ambiguous}.
+            \item If no candidate is viable but at least one had the correct arity $\to$ status is \texttt{TypeMismatch}.
+            \item If no candidate had the correct arity $\to$ status is \texttt{ArityMismatch}.
+        \end{itemize}
+    \item The result includes the list of candidates with failure reasons, which makes it possible to generate detailed diagnostics.
+\end{enumerate}
+
+\subsection{Type and Protocol Conformity}
+
+Conformity (subtyping) is defined through \texttt{typeConforms} and \texttt{NominalTypeRegistry::conforms}.
+The main rules are:
+
+\begin{itemize}
+    \item Exact equality.
+    \item \texttt{Unknown} and \texttt{Any} conform to any type (and vice versa).
+    \item \texttt{Object} conforms to any type other than \texttt{Void} (all are objects).
+    \item Numbers: generic \texttt{Number} conforms to any specific number; a specific number conforms only to the same specific type or to generic \texttt{Number}.
+    \item Iterables and vectors: \texttt{Iterable<T>} conforms to \texttt{Iterable<U>} if $T$ conforms to $U$;
+    \texttt{Vector<T>} conforms to \texttt{Iterable<U>} if $T$ conforms to $U$; \texttt{Vector<T>} conforms to \texttt{Vector<U>} if $T$ conforms to $U$.
+    \item Functions: one function conforms to another if the parameters conform in reverse order (contravariance) and the return type conforms (covariance).
+    \item Nominal inheritance: a nominal type conforms to its parent and all its ancestors.
+    \item Protocols: a type conforms to a protocol if it implements all protocol methods with compatible signatures (allowing covariance in the return type).
+    Verification is structural.
+\end{itemize}
+
+\end{document}

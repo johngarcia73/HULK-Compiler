@@ -1,0 +1,95 @@
+\babel@toc {english}{}\relax 
+\contentsline {chapter}{\numberline {1}Introduction}{2}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Motivation and Objectives}{2}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Document Structure}{2}{section.1.2}%
+\contentsline {chapter}{\numberline {2}Compiler Architecture}{3}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Overview}{3}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}Main Components}{3}{subsection.2.1.1}%
+\contentsline {subsubsection}{Frontend Pipeline}{3}{section*.2}%
+\contentsline {subsubsection}{Analyzer Generators}{3}{section*.3}%
+\contentsline {subsubsection}{Semantic Analyzer}{3}{section*.4}%
+\contentsline {section}{\numberline {2.2}Data Flow}{4}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Error Handling}{4}{section.2.3}%
+\contentsline {chapter}{\numberline {3}Lexical Analysis and Lexer Generation}{5}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Purpose and Responsibilities}{5}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Token Specification}{5}{section.3.2}%
+\contentsline {section}{\numberline {3.3}Complete Lexer Generator Pipeline}{6}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Stage 1: Infix-to-Postfix Conversion}{6}{subsection.3.3.1}%
+\contentsline {subsubsection}{Problem}{6}{section*.5}%
+\contentsline {subsubsection}{Solution: Modified Shunting Yard Algorithm}{6}{section*.6}%
+\contentsline {subsection}{\numberline {3.3.2}Stage 2: NFA Construction Using Thompson's Algorithm}{6}{subsection.3.3.2}%
+\contentsline {subsubsection}{Theoretical Basis}{6}{section*.7}%
+\contentsline {subsection}{\numberline {3.3.3}Stage 3: Merging Multiple NFAs}{6}{subsection.3.3.3}%
+\contentsline {subsubsection}{Algorithm}{6}{section*.8}%
+\contentsline {subsubsection}{Result}{7}{section*.9}%
+\contentsline {subsection}{\numberline {3.3.4}Stage 4: NFA to DFA Conversion (Subset Construction)}{7}{subsection.3.3.4}%
+\contentsline {subsubsection}{Problem}{7}{section*.10}%
+\contentsline {subsubsection}{Algorithm: Subset Construction}{7}{section*.11}%
+\contentsline {subsubsection}{Optimization: State Canonicalization}{7}{section*.12}%
+\contentsline {subsubsection}{Advantages of the DFA}{7}{section*.13}%
+\contentsline {section}{\numberline {3.4}Runtime Tokenization Algorithm}{8}{section.3.4}%
+\contentsline {subsubsection}{Priority Handling}{8}{section*.14}%
+\contentsline {section}{\numberline {3.5}Resolved Challenges}{8}{section.3.5}%
+\contentsline {subsection}{\numberline {3.5.1}Problem: Keywords vs. Identifiers}{8}{subsection.3.5.1}%
+\contentsline {subsection}{\numberline {3.5.2}Problem: Ambiguous Numbers (Integers vs. Decimals)}{8}{subsection.3.5.2}%
+\contentsline {subsection}{\numberline {3.5.3}Problem: Strings with Special Characters}{9}{subsection.3.5.3}%
+\contentsline {subsection}{\numberline {3.5.4}Problem: DFA Spatial Efficiency}{9}{subsection.3.5.4}%
+\contentsline {chapter}{\numberline {4}Syntactic Analysis and Parser Generation}{10}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Purpose and Responsibilities}{10}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Complete Parser Generator Pipeline}{10}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}Stage 1: Computation of \textsc {First} and \textsc {Nullable} Sets}{11}{subsection.4.2.1}%
+\contentsline {subsubsection}{Problem}{11}{section*.15}%
+\contentsline {subsubsection}{Solution: Fixed-Point Iterative Algorithm}{11}{section*.16}%
+\contentsline {subsection}{\numberline {4.2.2}Stage 2: Construction of the LR(1) Automaton}{11}{subsection.4.2.2}%
+\contentsline {subsubsection}{Problem}{11}{section*.17}%
+\contentsline {subsubsection}{Solution: Canonical LR(1) Construction Algorithm}{11}{section*.18}%
+\contentsline {subsection}{\numberline {4.2.3}Stage 3: LALR Merging}{12}{subsection.4.2.3}%
+\contentsline {subsubsection}{Problem}{12}{section*.19}%
+\contentsline {subsubsection}{Solution: Grouping by Core}{12}{section*.20}%
+\contentsline {subsection}{\numberline {4.2.4}Stage 4: Parsing Table Generation}{12}{subsection.4.2.4}%
+\contentsline {subsubsection}{Problem}{12}{section*.21}%
+\contentsline {subsubsection}{Solution: Table-Filling Algorithm}{12}{section*.22}%
+\contentsline {subsection}{\numberline {4.2.5}Stage 5: Parser Execution and AST Construction}{13}{subsection.4.2.5}%
+\contentsline {subsubsection}{Problem}{13}{section*.23}%
+\contentsline {subsubsection}{Solution: LR Parsing Algorithm}{13}{section*.24}%
+\contentsline {subsection}{\numberline {4.2.6}AST Builder Integration}{13}{subsection.4.2.6}%
+\contentsline {subsubsection}{Builder Interface}{14}{section*.25}%
+\contentsline {subsubsection}{Construction Process}{14}{section*.26}%
+\contentsline {subsubsection}{Construction Example}{14}{section*.27}%
+\contentsline {subsubsection}{Advantages of This Approach}{14}{section*.28}%
+\contentsline {section}{\numberline {4.3}Key Algorithms}{15}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}LR(1) Closure}{15}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}Goto}{15}{subsection.4.3.2}%
+\contentsline {subsection}{\numberline {4.3.3}State Fingerprinting}{15}{subsection.4.3.3}%
+\contentsline {subsection}{\numberline {4.3.4}Conflict Resolution}{15}{subsection.4.3.4}%
+\contentsline {section}{\numberline {4.4}Resolved Challenges}{15}{section.4.4}%
+\contentsline {subsection}{\numberline {4.4.1}Integration with the Lexical Analyzer}{15}{subsection.4.4.1}%
+\contentsline {subsection}{\numberline {4.4.2}Handling the \$ Symbol}{15}{subsection.4.4.2}%
+\contentsline {subsection}{\numberline {4.4.3}Table Efficiency}{16}{subsection.4.4.3}%
+\contentsline {chapter}{\numberline {5}Semantic Analysis and Inference Pipeline}{17}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Purpose and Responsibilities}{17}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Complete Semantic Analysis Pipeline}{17}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}Stage 1: Declaration and Dependency Collection}{18}{subsection.5.2.1}%
+\contentsline {subsubsection}{Problem}{18}{section*.29}%
+\contentsline {subsubsection}{Solution: Collection-Mode Traversal}{18}{section*.30}%
+\contentsline {subsubsection}{Result}{18}{section*.31}%
+\contentsline {subsection}{\numberline {5.2.2}Stage 2: Topological Ordering of Functions}{18}{subsection.5.2.2}%
+\contentsline {subsubsection}{Problem}{18}{section*.32}%
+\contentsline {subsubsection}{Solution: DFS Algorithm on the Dependency Graph}{18}{section*.33}%
+\contentsline {subsubsection}{Result}{19}{section*.34}%
+\contentsline {subsection}{\numberline {5.2.3}Stage 3: Function Analysis}{19}{subsection.5.2.3}%
+\contentsline {subsubsection}{Problem}{19}{section*.35}%
+\contentsline {subsubsection}{Solution: Analysis-Mode Visitor}{19}{section*.36}%
+\contentsline {subsubsection}{Result}{20}{section*.37}%
+\contentsline {subsection}{\numberline {5.2.4}Stage 4: Type Analysis}{20}{subsection.5.2.4}%
+\contentsline {subsubsection}{Problem}{20}{section*.38}%
+\contentsline {subsubsection}{Solution: Sequential Attribute and Method Analysis}{20}{section*.39}%
+\contentsline {subsubsection}{Result}{20}{section*.40}%
+\contentsline {subsection}{\numberline {5.2.5}Stage 5: Global Statement Analysis}{20}{subsection.5.2.5}%
+\contentsline {subsubsection}{Problem}{20}{section*.41}%
+\contentsline {subsubsection}{Solution}{20}{section*.42}%
+\contentsline {section}{\numberline {5.3}Key Algorithms}{21}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1}Constraint-Based Type Inference}{21}{subsection.5.3.1}%
+\contentsline {subsubsection}{Handling Generic vs. Specific Numbers}{21}{section*.43}%
+\contentsline {subsection}{\numberline {5.3.2}Overload Resolution}{21}{subsection.5.3.2}%
+\contentsline {subsection}{\numberline {5.3.3}Type and Protocol Conformity}{22}{subsection.5.3.3}%

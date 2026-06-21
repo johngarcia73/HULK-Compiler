@@ -48,3 +48,10 @@ tests/integration_tests/results/
 .codex
 #Binaries
 hulk
+
+#Latex auxiliary files
+./report/hulk_compiler_pipeline_report.log
+./report/hulk_compiler_pipeline_report.aux
+./report/hulk_compiler_pipeline_report.out
+./report/hulk_compiler_pipeline_report.synctex.gz
+./report/hulk_compiler_pipeline_report.toc
