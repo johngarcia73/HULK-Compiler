@@ -3,7 +3,7 @@
 #include <string>
 #include "../semantic/visitor.hpp"
 #include "../common/string_builder.hpp"
-#include "scope_table.hpp"
+#include "../common/scope_table.hpp"
 #include "lowering.hpp"
 #include "string_pool.hpp"
 #include "name_generator.hpp"

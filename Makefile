@@ -34,7 +34,6 @@ SRCS := \
 	semantic/type_inference_visitor.cpp\
 	lowering/lowering.cpp\
 	ir_generator/lowering.cpp\
-	ir_generator/scope_table.cpp\
 	ir_generator/ir_generator.cpp \
 
 .PHONY: all clean

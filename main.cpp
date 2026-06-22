@@ -66,6 +66,19 @@ int main(int argc, char** argv) {
     //Lowering stub
     LoweringVisitor lowering;
     ast->accept(lowering);
+    if (debug) {
+        
+        std::string ast_file = output_exe+".lowered.ast";
+
+        std::ofstream out(ast_file);
+        if (!out) {
+            std::cerr << "Error: cannot write to " << ast_file << '\n';
+            return 4;
+        }
+        ast->print(out);
+      
+    }
+
     // ----- IR generation -----
     IrGenerator ir_generator;
     std::string qbe_ir = ir_generator.generate(ast);

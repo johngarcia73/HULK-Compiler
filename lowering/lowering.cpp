@@ -10,27 +10,40 @@ Type* LoweringVisitor::visit(ProgramNode &node) {
         parentReference = &stmt;
         stmt->accept(*this);
     }
+    for(auto& typeDecl : generatedTypes){
+        node.decls.insert(node.decls.begin(), typeDecl); 
+    }
+    generatedTypes.clear();
     return nullptr;
 }
 
 Type* LoweringVisitor::visit(BlockNode& node) {
+    scopeTable.enterScope();
     for (auto& stmt : node.stmts) {
         parentReference = &stmt;
         stmt->accept(*this);
     }
+    scopeTable.exitScope();
     return nullptr;
 }
 
 Type* LoweringVisitor::visit(FunctionDeclNode& node) {
+    scopeTable.enterScope();
+    for (size_t i = 0; i < node.params.size(); i++)
+    {
+        scopeTable.saveVariable(node.params[i],node.paramTypes[i]);
+    }
+    
     auto parentRefCopy = parentReference;
     if (node.body) {
         parentReference = &node.body;
         node.body->accept(*this);
     }
-    if (node.exprBody) {
+    if(node.exprBody){
         parentReference = &node.exprBody;
         node.exprBody->accept(*this);
     }
+    scopeTable.exitScope();
     if(!node.isInline){
         auto funcDeclNode = new FunctionDeclNode(node.name,node.params, node.paramTypes,
                      node.returnType, node.body, true);
@@ -44,34 +57,45 @@ Type* LoweringVisitor::visit(FunctionDeclNode& node) {
 }
 
 Type* LoweringVisitor::visit(LetNode& node) {
+    
     if (node.init) {
         parentReference = &node.init;
         node.init->accept(*this);
     }
+    scopeTable.enterScope();
+    scopeTable.saveVariable(node.name,node.init->type);
     if (node.body) {
         parentReference = &node.body;
         node.body->accept(*this);
     }
+    scopeTable.exitScope();
     return nullptr;
 }
 
 Type* LoweringVisitor::visit(IfNode& node) {
+    
     if (node.condition) {
         parentReference = &node.condition;
         node.condition->accept(*this);
     }
+    scopeTable.enterScope();
     if (node.then_branch) {
         parentReference = &node.then_branch;
         node.then_branch->accept(*this);
     }
+    scopeTable.exitScope();
+
+    scopeTable.enterScope();
     if (node.else_branch) {
         parentReference = &node.else_branch;
         node.else_branch->accept(*this);
     }
+    scopeTable.exitScope();
     return nullptr;
 }
 
 Type* LoweringVisitor::visit(FunctionCallNode& node) {
+    auto parentRefCopy = parentReference;
     if (node.receiver) {
         parentReference = &node.receiver;
         node.receiver->accept(*this);
@@ -80,6 +104,24 @@ Type* LoweringVisitor::visit(FunctionCallNode& node) {
         parentReference = &arg;
         arg->accept(*this);
     }
+    
+    bool isDelegateCall = false;
+    for (const auto& note : node.overloadNotes) {
+        if (note.find("Selected functor value:") != std::string::npos) {
+            isDelegateCall = true;
+            break;
+        }
+    }
+    
+    if (isDelegateCall && !node.receiver) {
+        auto delegateInstance = new VariableNode(node.name);
+        delegateInstance->type = node.resolvedFunctionType;
+        auto invokeCall = new FunctionCallNode("invoke", node.args, delegateInstance);
+        invokeCall->type = node.type;
+        invokeCall->span = node.span;
+        *parentRefCopy = invokeCall;
+    }
+    
     return nullptr;
 }
 
@@ -183,10 +225,12 @@ Type* LoweringVisitor::visit(WhileNode& node) {
         parentReference = &node.condition;
         node.condition->accept(*this);
     }
+    scopeTable.enterScope();
     if (node.body) {
         parentReference = &node.body;
         node.body->accept(*this);
     }
+    scopeTable.exitScope();
     return nullptr;
 }
 
@@ -210,10 +254,12 @@ Type* LoweringVisitor::visit(ForNode& node) {
         parentReference = &node.iterable;
         node.iterable->accept(*this);
     }
+    scopeTable.enterScope();
     if (node.body) {
         parentReference = &node.body;
         node.body->accept(*this);
     }
+    scopeTable.exitScope();
     std::vector<ASTNodePtr> emptyVec;
     auto iterableVarCond = new VariableNode("iterable");
     iterableVarCond->type = node.iterable->type;
@@ -300,15 +346,95 @@ Type* LoweringVisitor::visit(ReturnNode& node) {
 }
 
 Type* LoweringVisitor::visit(LambdaNode& node) {
-    // LOWERING SUGGESTION 2: Lambdas/Closures to Classes
-    // Lambda expressions (closures) can be lowered into an explicit class declaration:
-    // 1. Create a new class that implements an `invoke` method containing the lambda body.
-    // 2. The captured variables from the surrounding environment become attributes of this class.
-    // 3. The lambda instantiation `(x => x + y)` becomes `new Lambda_1(y)`.
+    auto parentRefCopy = parentReference;
+    
     if (node.body) {
         parentReference = &node.body;
         node.body->accept(*this);
     }
+      
+    static int delegateId = 0;
+    std::string delegateName = "Delegate_" + std::to_string(++delegateId);
+    
+    auto invokeMethod = new FunctionDeclNode(
+        "invoke",
+        node.params,
+        node.paramTypes,
+        node.declaredReturnType,
+        node.body,
+        true
+    );
+
+    invokeMethod->isMethod = true;
+    invokeMethod->ownerTypeName = delegateName;
+    invokeMethod->paramTypeNames = node.paramTypeNames;
+    invokeMethod->declaredReturnTypeName = node.declaredReturnTypeName;
+    invokeMethod->hasExplicitReturnType = node.hasExplicitReturnType;
+    
+    ASTNodePtr wrappedBody = node.body;  // start with the original lambda body
+    auto variablesInScope = scopeTable.getAllVariables();
+    // Iterate in reverse so the first variable becomes the outermost let
+    for (int i=variablesInScope.size()-1;i>=0; i--) {
+        auto vt = variablesInScope[i];
+        auto var = vt.first;
+        auto type = vt.second;
+        // Build self.variableName
+        auto selfVar = new VariableNode("self");
+        selfVar->type = new NominalType(delegateName);
+        auto memberAccess = new MemberAccessNode(selfVar, var);
+        memberAccess->type=type,
+        // Create LetNode: let var = self.var in wrappedBody
+        
+        wrappedBody = new LetNode(var, memberAccess, wrappedBody, nullptr, "", false);
+        wrappedBody->type = node.body->type;
+    }
+    invokeMethod->exprBody = wrappedBody;   // replace the original body with the wrapped one
+    std::vector<std::string> ctorParams;
+    std::vector<Type*> ctorParamTypes;
+    std::vector<std::string> ctorParamTypeNames;
+    std::string parentType = "";
+    std::vector<ASTNodePtr> parentArgs;
+    std::vector<ASTNodePtr> members;
+    members.push_back(invokeMethod);
+    variablesInScope = scopeTable.getAllVariables();
+    std::vector<ASTNodePtr> newArgs;
+    
+    for (size_t i = 0; i < variablesInScope.size(); i++)
+    {
+        auto var = variablesInScope[i].first;
+        auto type = variablesInScope[i].second;
+        ctorParams.push_back(var);
+        ctorParamTypes.push_back(type);
+        ctorParamTypeNames.push_back(type->toString());
+        ASTNodePtr variableNode = new VariableNode(var);
+        variableNode->type = type;
+        auto attr = new AttributeDeclNode(var,variableNode);
+        attr->type=type;
+        members.push_back(attr);
+        variableNode = new VariableNode(var);
+        variableNode->type = type;
+        newArgs.push_back(variableNode);
+    }
+    
+    
+    auto typeDecl = new TypeDeclNode(
+        delegateName,
+        ctorParams,
+        ctorParamTypes,
+        ctorParamTypeNames,
+        parentType,
+        parentArgs,
+        members,
+        false
+    );
+    typeDecl->parentType = "Object";
+    generatedTypes.push_back(typeDecl);
+    
+    
+    ASTNodePtr newNode = new NewNode(delegateName, newArgs);
+    newNode->type = new NominalType(delegateName);
+    *parentRefCopy = newNode;
+    
     return nullptr;
 }
 

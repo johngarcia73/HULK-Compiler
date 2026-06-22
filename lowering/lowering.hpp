@@ -1,10 +1,12 @@
 #pragma once
 #include "../semantic/visitor.hpp"
-
+#include "../common/scope_table.hpp"
 class LoweringVisitor : public Visitor {
 public:
     virtual ~LoweringVisitor() = default;
+    ScopeTable scopeTable; 
     ASTNodePtr* parentReference=nullptr;
+    std::vector<ASTNodePtr> generatedTypes;
     Type* visit(ProgramNode& node) override;
     Type* visit(BlockNode& node) override;
     Type* visit(FunctionDeclNode& node) override;
