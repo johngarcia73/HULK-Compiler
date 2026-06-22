@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999995 (TeX Live 2023) (preloaded format=xelatex 2026.5.16)  21 JUN 2026 19:38
+This is XeTeX, Version 3.141592653-2.6-0.999995 (TeX Live 2023) (preloaded format=xelatex 2026.5.16)  22 JUN 2026 14:30
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -637,7 +637,7 @@ Chapter 3.
 [6
 
 ] [7] [8]
-Overfull \hbox (338.16147pt too wide) in paragraph at lines 354--358
+Overfull \hbox (338.16147pt too wide) in paragraph at lines 355--359
 \TU/lmr/m/n/12 precedence over generic identifiers. =================================================================== 
  []
 
@@ -645,73 +645,73 @@ Overfull \hbox (338.16147pt too wide) in paragraph at lines 354--358
 Chapter 4.
 
 LaTeX Font Warning: Font shape `TU/lmr/bx/sc' undefined
-(Font)              using `TU/lmr/bx/n' instead on input line 441.
+(Font)              using `TU/lmr/bx/n' instead on input line 442.
 
 [11
 
 ] [12] [13] [14]
-Overfull \hbox (19.36842pt too wide) in paragraph at lines 575--576
+Overfull \hbox (19.36842pt too wide) in paragraph at lines 576--577
 []\TU/lmr/m/n/12 The appropriate AST nodes are created (for example, \TU/lmtt/m/n/12 NumberNode\TU/lmr/m/n/12 , \TU/lmtt/m/n/12 BinaryOpNode\TU/lmr/m/n/12 ,
  []
 
 
-Overfull \hbox (8.31213pt too wide) in paragraph at lines 576--577
+Overfull \hbox (8.31213pt too wide) in paragraph at lines 577--578
 []\TU/lmr/m/n/12 Spans (location in the source code) are assigned to the nodes using \TU/lmtt/m/n/12 attach_span\TU/lmr/m/n/12 . 
  []
 
 
-Overfull \hbox (69.19829pt too wide) in paragraph at lines 584--587
+Overfull \hbox (69.19829pt too wide) in paragraph at lines 585--588
 \TU/lmr/m/n/12 abstracting positions 0 and 2. For complex function declarations, it delegates to \TU/lmtt/m/n/12 build_function_like\TU/lmr/m/n/12 ,
  []
 
 
-Overfull \hbox (284.82944pt too wide) in paragraph at lines 584--587
+Overfull \hbox (284.82944pt too wide) in paragraph at lines 585--588
 \TU/lmr/m/n/12 with operator \TU/lmtt/m/n/12 "+" \TU/lmr/m/n/12 and those children. For the production [][]\TU/lmtt/m/n/12 function_decl : FUNCTION IDENTIFIER L_PAREN param_list_opt R_PAREN block[]\TU/lmr/m/n/12 ,
  []
 
 [15] [16] [17]
 Chapter 5.
 LaTeX Font Info:    Font shape `TU/lmtt/bx/n' in size <12> not available
-(Font)              Font shape `TU/lmtt/b/n' tried instead on input line 667.
+(Font)              Font shape `TU/lmtt/b/n' tried instead on input line 668.
 
-Overfull \hbox (11.56017pt too wide) in paragraph at lines 684--693
+Overfull \hbox (11.56017pt too wide) in paragraph at lines 685--694
  [] 
  []
 
 [18
 
 ]
-Overfull \hbox (32.77084pt too wide) in paragraph at lines 704--706
+Overfull \hbox (32.77084pt too wide) in paragraph at lines 705--707
 \TU/lmr/m/n/12 The visitor traverses the AST with the flags \TU/lmtt/m/n/12 collecting = true \TU/lmr/m/n/12 and \TU/lmtt/m/n/12 collectingDependencies
  []
 
 
-Overfull \hbox (28.25615pt too wide) in paragraph at lines 708--710
+Overfull \hbox (28.25615pt too wide) in paragraph at lines 709--711
 []\TU/lmr/m/n/12 All types and protocols are registered in \TU/lmtt/m/n/12 NominalTypeRegistry \TU/lmr/m/n/12 through \TU/lmtt/m/n/12 registerType()
  []
 
 [19]
-Overfull \hbox (19.10147pt too wide) in paragraph at lines 764--766
+Overfull \hbox (19.10147pt too wide) in paragraph at lines 765--767
 \TU/lmtt/m/n/12 captureFunctionParameterTypes()\TU/lmr/m/n/12 . If any unannotated parameter remains \TU/lmtt/m/n/12 Unknown\TU/lmr/m/n/12 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 770--781
+Underfull \hbox (badness 10000) in paragraph at lines 771--782
 
  []
 
 [20]
-Overfull \hbox (4.48814pt too wide) in paragraph at lines 806--808
+Overfull \hbox (4.48814pt too wide) in paragraph at lines 807--809
 []\TU/lmr/m/n/12 Analyzes each method by running the same function-analysis process (with \TU/lmtt/m/n/12 isMethod
  []
 
 [21]
-Overfull \hbox (5.94495pt too wide) in paragraph at lines 851--853
+Overfull \hbox (5.94495pt too wide) in paragraph at lines 852--854
 \TU/lmr/m/n/12 they are mixed, they are promoted to the widest common type through \TU/lmtt/m/n/12 commonNumberType\TU/lmr/m/n/12 .
  []
 
 [22]
-Overfull \hbox (43.72815pt too wide) in paragraph at lines 889--891
+Overfull \hbox (43.72815pt too wide) in paragraph at lines 890--892
 \TU/lmr/m/n/12 Conformity (subtyping) is defined through \TU/lmtt/m/n/12 typeConforms \TU/lmr/m/n/12 and \TU/lmtt/m/n/12 NominalTypeRegistry::conforms\TU/lmr/m/n/12 .
  []
 
