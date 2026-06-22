@@ -36,9 +36,13 @@ SRCS := \
 	ir_generator/lowering.cpp\
 	ir_generator/ir_generator.cpp \
 
-.PHONY: all clean
+.PHONY: all build clean
 
+# Keep your default target
 all: qbe libgc $(RUNTIME_O) $(TARGET)   # everything
+
+# ADD THIS LINE: Point the 'build' target to 'all'
+build: all
 
 # 1. QBE
 qbe: $(QBE_BIN)
