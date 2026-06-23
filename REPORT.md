@@ -28,6 +28,7 @@ June 2026
 ---
 
 # Introduction
+# The Frontend
 
 The Hulk compiler is a comprehensive computer science and software engineering project that implements a production-grade compiler for a modern programming language called Hulk (Havana University Language for Kompilers).
 
@@ -714,3 +715,284 @@ The main rules are:
 - Nominal inheritance: a nominal type conforms to its parent and all its ancestors.
 - Protocols: a type conforms to a protocol if it implements all protocol methods with compatible signatures (allowing covariance in the return type).
   Verification is structural.
+
+# Backend: Lowering, IR Generation and Runtime
+
+The backend of the Hulk compiler is responsible for transforming the semantically annotated Abstract Syntax Tree (AST) into an executable binary. It is structured as a three‑stage pipeline:
+
+```mermaid
+flowchart LR
+    ast["Semantically Validated AST"] --> lowering["AST Lowering"]
+    lowering --> irgen["IR Generation (QBE)"]
+    irgen --> qbe["QBE Compiler<br/>(.ssa → .s)"]
+    qbe --> asm["Assembler<br/>(.s → .o)"]
+    asm --> link["Link with Runtime<br/>(.o + runtime.o + libgc)"]
+    link --> exe["Executable"]
+```
+
+- **AST Lowering** — a series of source‑to‑source transformations that simplify the AST, removing high‑level constructs and making the subsequent code generation phase uniform and straightforward.
+- **IR Generation** — a traversal of the lowered AST that emits QBE Intermediate Representation (IR), a simple, portable low‑level language that abstracts the target machine.
+- **Runtime Integration** — the generated QBE code is compiled to assembly, assembled, and finally linked with a C runtime that provides memory management, dynamic dispatch, and built‑in operations.
+
+This design separates concerns: lowering deals with language semantics, IR generation focuses on translating the program to QBE, and the runtime provides the underlying execution environment. The overall pipeline is orchestrated by the `main.cpp` driver.
+
+---
+
+## 1. AST Lowering
+
+Lowering is a phase that modifies the AST in place, replacing complex nodes with equivalent simpler ones. The lowering visitor (`LoweringVisitor`) traverses the AST and applies transformations that reduce the number of language features the IR generator must handle. All transformations are performed before IR generation, so the IR generator sees a more uniform tree.
+
+### 1.1 For‑Loops to While‑Loops
+
+The `ForNode` represents a loop over an iterable. The lowering visitor transforms it into a `LetNode` that creates an iterator, followed by a `WhileNode` that repeatedly calls `next` and binds the current value. The generated structure is:
+
+```
+let it = iterable in
+while (it.next()) {
+    let iterator = it.current() in
+    body
+}
+```
+
+This removes the need for IR generation to handle `for` loops separately. The implementation uses the methods `next()` and `current()` that are expected to exist on the iterable object.
+
+```mermaid
+flowchart LR
+    fornode["ForNode(x in iterable) body"] --> letnode["LetNode(it = iterable)"]
+    letnode --> whilenode["WhileNode(condition: it.next())"]
+    whilenode --> letnode2["LetNode(x = it.current())"]
+    letnode2 --> body["original body"]
+```
+
+### 1.2 Lambda Lifting to Delegates
+
+Lambda expressions (anonymous functions) are lowered into a new type declaration (a *delegate* type) that encapsulates the captured variables. For each lambda, the lowering visitor:
+
+- Creates a unique name for the delegate (e.g., `Delegate_1`).
+- Defines an `invoke` method that has the lambda’s parameters and body.
+- Wraps the body in nested `LetNode`s that bind each free variable to `self.variable`, so that the captured variables become fields of the delegate object.
+- Generates a new `TypeDeclNode` for the delegate, with an attribute for each captured variable and the `invoke` method.
+- Replaces the original lambda with a `NewNode` that constructs an instance of this delegate, passing the captured values as constructor arguments.
+
+This technique, known as *lambda lifting*, turns closures into ordinary objects, which the IR generator can handle using the standard object allocation and method invocation machinery.
+
+```mermaid
+flowchart TD
+    lambda["Lambda(params, body)"] --> delegate["Delegate Type Declaration"]
+    delegate --> fields["fields: captured variables"]
+    delegate --> invoke["invoke method: body with self.var access"]
+    lambda --> new["new Delegate(captured values)"]
+```
+
+### 1.3 Method Calls and Overloaded Function Calls
+
+The lowering visitor also transforms method calls and certain function calls to simplify dispatch:
+
+- **Delegate invocation**: When a function call is identified as a delegate call (via an `overloadNote`), and there is no explicit receiver, it rewrites the call to `invoke(delegate, args)`. This makes delegate calls explicit and uniform.
+- **Method calls**: A separate lowering utility `methodCallToFunctionCallLowering` converts a method call `obj.method(args)` into a function call `method(obj, args)`, where the receiver becomes the first argument. This is used during IR generation to unify method and function dispatch.
+
+### 1.4 Operator Desugaring
+
+Certain binary operators are desugared into function calls or combinations of simpler operators:
+
+- `^` (exponentiation) and `%` (modulo) are replaced with calls to `pow` and `mod` respectively.
+- `!=` is rewritten as `!(==)`.
+- `@@` (string join with a space) is lowered to `(left @ " ") @ right`, i.e., two string concatenations.
+
+These transformations reduce the number of special cases the IR generator must handle.
+
+### 1.5 Inline Function Inlining
+
+In the `FunctionDeclNode` visitor, if the function is marked `inline`, the lowering visitor replaces the node with a new function declaration that is marked as `isInline = true`. This flag is later used by the IR generator to decide whether to emit the function body as a separate entity or inline it at call sites (currently the IR generator simply emits all functions, but the flag is retained for future optimisations).
+
+### 1.6 Scope Management
+
+The lowering visitor maintains a `ScopeTable` to manage variable scopes. This is necessary for lambda lifting, because capturing variables requires knowing which variables are in scope. The scope table is also used for the `LetNode` and `BlockNode` visits to enter and exit scopes correctly.
+
+After lowering, the AST is simplified and ready for IR generation. The transformation is done in‑place, meaning that the original tree is replaced by its lowered form.
+
+---
+
+## 2. IR Generation
+
+The IR generator (`IrGenerator`) is a visitor that walks the lowered AST and emits QBE IR. QBE is a minimal intermediate representation that provides basic types (`w`, `l`, `s`, `d`), control flow, function calls, and memory operations. The generator is responsible for mapping each Hulk construct to a sequence of QBE instructions.
+
+### 2.1 QBE Type Mapping
+
+The `TypeUtils` namespace provides helper functions to map Hulk semantic types to QBE types:
+
+| Hulk Type        | QBE Type          |
+|------------------|-------------------|
+| `Bool`           | `w` (32‑bit int)  |
+| `Number`         | `d` (double) on 64‑bit, `s` (float) on 32‑bit |
+| `String`, `Object`, `Any` | `l` (pointer) on 64‑bit, `w` on 32‑bit |
+| `Void`           | (no value)        |
+
+The target architecture (64‑bit vs 32‑bit) is detected at compile time and used to select the appropriate QBE types and pointer sizes.
+
+### 2.2 Name Management and String Pooling
+
+The IR generator uses a `NameManager` to generate unique QBE temporary names (`%tmp1`, `%tmp2`, ...) and a `StringPool` to deduplicate string literals. Each string literal is stored in the data section with a unique label, and the IR code loads its address when needed.
+
+### 2.3 Memory Management and Boehm GC
+
+All heap allocations are performed via the Boehm‑Demsers‑Weiser conservative garbage collector. The `_hulk_alloc` function (defined in the runtime) calls `GC_malloc` to allocate memory. The IR generator emits a call to `_hulk_alloc` for every `NewNode`. The size argument is computed by the `TypeRegister`, which maintains the layout of each user‑defined type (including inheritance).
+
+The garbage collector is initialised at program start by calling `_hulk_gc_init()` before any other operations. This is emitted in the `$main` function.
+
+### 2.4 Object Layout and Type Information
+
+Each Hulk object is laid out in memory as a contiguous block. The first word (pointer sized) stores a *type identifier* (a string literal, e.g., `$Person`), which is used by the runtime for dynamic dispatch and type checking. The `TypeRegister` class computes the offset of each attribute, taking inheritance into account. For example, if type `B` inherits from `A`, the layout of `B` is the layout of `A` followed by `B`'s own attributes.
+
+The IR generator uses these offsets to emit `load` and `store` instructions for field access. Member access (`obj.field`) becomes a pointer addition followed by a load of the appropriate size.
+
+```mermaid
+flowchart LR
+    object["Object (type id)"] --> attr1["Attribute 1"]
+    object --> attr2["Attribute 2"]
+    object --> attrN["..."]
+    attr1 --> offset1["offset = pointer size"]
+    attr2 --> offset2["offset = pointer size + size(attr1)"]
+```
+
+### 2.5 Function Definitions and Method Tables
+
+Functions are emitted as QBE functions. For global functions, the name is prefixed with `$_`. For methods, a separate lowering step (`methodToFunctionLowering`) renames the method to `_TypeName_method` and adds an extra parameter `self` at the end of the parameter list. This makes method calls uniform with function calls: the receiver is passed as the last argument.
+
+The runtime maintains two global hash maps to support inheritance and dynamic dispatch:
+
+- `inheritance_map`: maps a class ID (an integer literal) to its parent class ID.
+- `vtable_map`: maps a class ID to a hash map that associates method IDs with function pointers.
+
+During program startup, the IR generator emits calls to `_register_inheritance` and `_register_method` for every type and every method defined in the program. These calls are placed inside `$main` so that they execute before any user code. The method IDs are simply the method name strings (e.g., `$toString`), and the function pointers are the QBE labels of the lowered methods.
+
+```mermaid
+flowchart TD
+    main["$main()"] --> reg_inh["_register_inheritance(child, parent)"]
+    main --> reg_method["_register_method(class, method_name, fn_ptr)"]
+    reg_method --> vtable["vtable_map[class][method_name] = fn_ptr"]
+```
+
+### 2.6 Dynamic Dispatch
+
+When the IR generator encounters a method call (`obj.method(args)`), it:
+
+1. Loads the type identifier from the object (first word).
+2. Calls `_get_virtual_method(type_id, method_name)` to obtain the function pointer for that method.
+3. Calls that function pointer, passing the receiver as the last argument (as per the method calling convention).
+
+This lookup occurs at runtime, enabling polymorphism.
+
+```mermaid
+flowchart LR
+    call["obj.method(args)"] --> load_type["load type id from obj"]
+    load_type --> lookup["_get_virtual_method(type, method)"]
+    lookup --> call_ptr["call function_ptr(obj, args)"]
+```
+
+### 2.7 Built‑in Functions
+
+The runtime provides several built‑in functions that the IR generator calls directly:
+
+- `_print`: prints a string (with length prefix) to stdout.
+- `_string_concat`: concatenates two Hulk strings.
+- `_string_compair`: compares two Hulk strings for equality.
+- `_d_to_string`, `_l_to_string`, `_w_to_string`, `_s_to_string`: convert numeric and boolean values to Hulk strings.
+- `_pow`, `_mod`, `_sqrt`, `_sin`, `_cos`: math functions.
+
+The IR generator emits calls to these functions as needed. For `print`, it first converts its argument to a string using the appropriate `_*_to_string` function, then passes that string to `_print`.
+
+### 2.8 Control Flow
+
+Control flow constructs (`if`, `while`, `let`) are translated to QBE basic blocks and conditional jumps. For example, an `if` node generates a `jnz` instruction to branch to the `then` or `else` block, and a `phi`‑like merge (using a copy of the result) to unify the values from both branches. The IR generator ensures that each branch yields a value of the correct type.
+
+```mermaid
+flowchart TD
+    cond["condition"] --> jnz["jnz cond, @then, @else"]
+    jnz --> then["@then: evaluate then_branch"]
+    jnz --> else["@else: evaluate else_branch"]
+    then --> merge["@merge: %result = copy %then_value"]
+    else --> merge
+    merge --> continue["continue"]
+```
+
+### 2.9 Assignment
+
+Assignment to a variable or a field is handled by loading the right‑hand side value and storing it to the appropriate location. For variables, this is a local register; for fields, it is a memory address computed from the base pointer and field offset.
+
+### 2.10 String Literals
+
+String literals are stored in the data section with a 4‑byte length prefix (as expected by the runtime). The `StringPool` ensures each unique literal appears only once. The IR generator emits a `data` directive with the literal’s length and content.
+
+---
+
+## 3. Runtime Environment
+
+The runtime, written in C (`runtime.c`), provides the fundamental services that the generated QBE code relies upon. It is compiled separately to `runtime.o` and linked with the generated object file.
+
+### 3.1 Garbage Collection
+
+The runtime initialises the Boehm GC by calling `GC_init()`. All heap allocations go through `_hulk_alloc`, which is a thin wrapper around `GC_malloc`. The garbage collector automatically reclaims unreachable objects, so the Hulk program does not need explicit memory management.
+
+### 3.2 String Representation
+
+Hulk strings are stored as a length‑prefixed array of characters. The first 4 bytes contain the length (as a `uint32_t`), followed by the characters (without a null terminator). The runtime provides `_string_concat`, `_string_compair`, and conversion functions that respect this layout.
+
+### 3.3 Dynamic Dispatch Tables
+
+The runtime maintains two global hash maps (`inheritance_map` and `vtable_map`). The hash map implementation (`hashmap.h`) is a simple open‑addressing table. The functions `_register_inheritance`, `_register_method`, and `_get_virtual_method` are used to build and query the vtable. The method lookup walks the inheritance chain until it finds a method with the requested ID.
+
+### 3.4 Type‑to‑String Conversion
+
+The runtime provides family of functions `_d_to_string`, `_l_to_string`, `_w_to_string`, `_s_to_string` that take a value and a type flag, and return a Hulk string. These are used by the `print` function and by the string concatenation operator when its operands are not strings.
+
+### 3.5 Built‑in Math
+
+Standard math functions (`pow`, `fmod`, `sqrt`, `sin`, `cos`) are exposed as wrapper functions so that the IR generator can call them by name (`_pow`, etc.).
+
+---
+
+## 4. Compilation Pipeline Integration
+
+The `main.cpp` file orchestrates the entire compilation from source to executable. The steps are:
+
+1. **Frontend**: Run the frontend pipeline (lexing, parsing, semantic analysis) to obtain a semantically validated AST.
+2. **Lowering**: Apply the `LoweringVisitor` to transform the AST.
+3. **IR Generation**: Use `IrGenerator` to produce QBE IR as a string.
+4. **Write IR**: Save the IR to a `.ssa` file.
+5. **Invoke QBE**: Execute `qbe -o output.s input.ssa` to produce assembly.
+6. **Assemble**: Use `cc -c` to assemble to an object file.
+7. **Link**: Link the object file with `runtime.o` and the Boehm GC library (`-lgc`), producing the final executable.
+
+This pipeline is modular: each step can be replaced or augmented without affecting the others. The use of QBE as an intermediate compiler allows the Hulk compiler to target multiple architectures with minimal effort.
+
+```mermaid
+flowchart TD
+    source["source.hulk"] --> frontend["Frontend Pipeline"]
+    frontend --> ast["AST"]
+    ast --> lowering["AST Lowering"]
+    lowering --> lowered["Lowered AST"]
+    lowered --> irgen["IR Generator"]
+    irgen --> ssa[".ssa file"]
+    ssa --> qbe["qbe -o output.s"]
+    qbe --> asm[".s file"]
+    asm --> cc1["cc -c"]
+    cc1 --> obj[".o file"]
+    obj --> cc2["cc obj runtime.o -lgc"]
+    cc2 --> exe["executable"]
+```
+
+---
+
+## 5. Conclusion and Future Work
+
+The backend of the Hulk compiler successfully transforms a high‑level, object‑oriented language into efficient native code. The lowering phase simplifies the AST, the IR generator produces clean QBE code, and the runtime provides the necessary support for garbage collection, dynamic dispatch, and built‑in operations. This design balances simplicity and performance, making the compiler easy to maintain and extend.
+
+Future enhancements could include:
+
+- Optimisations in the lowering phase (e.g., constant folding, dead‑code elimination).
+- Support for tail‑call optimisation.
+- Better error messages for runtime failures (e.g., null pointer dereference).
+- A JIT compiler using QBE’s JIT capabilities.
+
+The backend is a testament to the power of using well‑defined intermediate representations and a clear separation of concerns.
