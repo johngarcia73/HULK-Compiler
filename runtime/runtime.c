@@ -68,7 +68,16 @@ void _register_method(long class_id, long method_id, void *method_ptr){
     *method_key = method_id;
     hashmap_put(method_map, method_key, sizeof(long), method_ptr);
 }
+long _parent(long current_id){
+    long *parent_ptr = (long *)hashmap_get(&inheritance_map, &current_id, sizeof(long));
 
+    if (parent_ptr == NULL) {
+        // No parent class — method not found anywhere in the chain
+        return NULL;
+    }
+
+    return *parent_ptr;
+}
 void *_get_virtual_method(long class_id, long method_id){
     long current_id = class_id;
 

@@ -11,7 +11,7 @@
 #include "type_register.hpp"
 #include <unordered_map>
 #include <vector>
-
+#include <regex>
 
 class ASTNode;
 
@@ -25,6 +25,7 @@ private:
     NameManager nameManager;
     std::string nameForCurrentExpression;
     std::string typeForCurrentExpression;
+    std::string currentFunctionDeclaration;
     ScopeTable scopeTable;
     TypeRegister typeRegister;
     

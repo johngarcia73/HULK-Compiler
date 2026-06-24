@@ -2,7 +2,6 @@ protocol Comparable {
     value(): Number;
 }
 
-
 type Temperature(deg: Number) {
     deg: Number = deg;
     value(): Number { self.deg; }

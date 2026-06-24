@@ -185,6 +185,7 @@ Type* IrGenerator::visit(IfNode& node) {
 }
 Type* IrGenerator::visit(FunctionCallNode &node) 
 {
+   
     if(node.name=="print")
     {
         codeBuilder.addLine("#Handle print function call");
@@ -224,6 +225,32 @@ Type* IrGenerator::visit(FunctionCallNode &node)
     //Note the underscore here to avoid collisions betwen ir code
     // and hulk code names
     std::string callTarget = "$_" + node.name;
+     if(node.name=="base"){
+
+        auto class_id = nameManager.generateName("class_id");
+        codeBuilder.addLine("%{} = {} load{} %{}",
+                                class_id,
+                                targetInfo.PointerType,
+                                targetInfo.PointerType,
+                                scopeTable.resolveVariable("self")
+        );
+        auto parent_id = nameManager.generateName("parent_id");
+        codeBuilder.addLine("%{} = l call $_parent(l %{})",
+                            parent_id,
+                            class_id
+        ); 
+        std::regex pattern("^_[^_]*_");
+        auto functionName = std::regex_replace(currentFunctionDeclaration, pattern, "");
+        auto function_ptr=nameManager.generateName("func_ptr"); 
+        codeBuilder.addLine("%{} = l call $_get_virtual_method(l %{},l ${})",
+                                    function_ptr,
+                                    parent_id,
+                                    functionName
+                            );
+        callTarget ="%"+function_ptr;
+        auto varNode =new VariableNode("self");
+        node.args.push_back(varNode);
+    }
     if (node.receiver) {
         node = *lowering::methodCallToFunctionCallLowering(&node);
         node.receiver->accept(*this);
@@ -701,6 +728,7 @@ Type* IrGenerator::visit(ProtocolDeclNode& node) {
 }
 Type* IrGenerator::visit(FunctionDeclNode& node) 
 { 
+    currentFunctionDeclaration = node.name;
     if(node.isMethod){
         // Only emit the lowered function definition here.
         // The _register_method call is emitted inside $main (visit(ProgramNode))
