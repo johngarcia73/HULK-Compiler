@@ -1,6 +1,6 @@
 # Lambda Expressions in the HULK Compiler: A Rigorous Implementation Study
 
-## 1. Introduction: The Problem Domain in HULK’s Ecosystem
+## 1. Introduction: The Problem Domain in HULK's Ecosystem
 
 HULK is a statically typed language that marries object‑oriented constructs (types, inheritance, protocols) with functional sensibilities (higher‑order functions, type inference, and expression‑oriented syntax). Within this hybrid paradigm, lambda expressions serve a critical role: they are the primary vehicle for **behaviour abstraction**—the ability to treat computations as data without the syntactic overhead of named function declarations.
 
@@ -15,7 +15,7 @@ The compiler must answer several fundamental questions: _How does the semantic v
 
 ---
 
-### 1.1 Eliminating the “Nominal Ceremony”
+### 1.1 Eliminating the "Nominal Ceremony"
 
 Without lambdas, higher‑order functions force programmers to pollute the namespace with single‑use function definitions. In HULK, writing:
 function apply_twice(f: (Number) -> Number, x: Number): Number { f(f(x)); }
@@ -23,11 +23,11 @@ would require a separate definition for every transformation. With lambdas, the 
 
 ### 1.2 Enabling Custom Control Structures
 
-HULK permits the definition of functions that abstract over control flow—for example, a `with_resource` pattern that acquires a resource, executes a user‑supplied block, and releases it. Lambdas are the only syntactically lightweight way to pass the “body” of such a custom construct without resorting to macros or code generation. This turns HULK from a fixed‑set‑of‑statements language into an **extensible** one, where programmers can design their own control‑flow primitives.
+HULK permits the definition of functions that abstract over control flow—for example, a `with_resource` pattern that acquires a resource, executes a user‑supplied block, and releases it. Lambdas are the only syntactically lightweight way to pass the "body" of such a custom construct without resorting to macros or code generation. This turns HULK from a fixed‑set‑of‑statements language into an **extensible** one, where programmers can design their own control‑flow primitives.
 
 ### 1.3 First‑Class Iteration and Collection Processing
 
-HULK provides built‑in vector types and iteration constructs. The combination of `for` loops and iterators is powerful, but lambdas elevate collection processing to a declarative style. Functions like `map`, `filter`, and `fold` become natural, encouraging a **data‑pipeline** programming model. This is not just syntactic sugar; it shifts the programmer’s mental model from _imperative steps_ to _transformational chains_, often reducing logic errors and improving parallelisability.
+HULK provides built‑in vector types and iteration constructs. The combination of `for` loops and iterators is powerful, but lambdas elevate collection processing to a declarative style. Functions like `map`, `filter`, and `fold` become natural, encouraging a **data‑pipeline** programming model. This is not just syntactic sugar; it shifts the programmer's mental model from _imperative steps_ to _transformational chains_, often reducing logic errors and improving parallelisability.
 
 ### 1.4 Delayed Evaluation and Lazy Initialisation
 
@@ -37,11 +37,11 @@ In HULK, lambdas of arity zero (often called _thunks_) allow deferring expensive
 
 ## 2 Implementation Architecture
 
-The remainder of this report dissects the implementation path of lambdas through the HULK compiler’s core front‑end phases: **AST construction**, **semantic analysis**, and **scoping**. Each subsection refers explicitly to the actual code structures that support these phases.
+The remainder of this report dissects the implementation path of lambdas through the HULK compiler's core front‑end phases: **AST construction**, **semantic analysis**, and **scoping**. Each subsection refers explicitly to the actual code structures that support these phases.
 
 ### 2.1 AST Representation: The `LambdaNode` Structure
 
-The parser’s AST builder creates a `LambdaNode` for every lambda expression, regardless of the syntactic form used. The node is defined in `ast_node.hpp` (and implemented in `ast_node.cpp`) as:
+The parser's AST builder creates a `LambdaNode` for every lambda expression, regardless of the syntactic form used. The node is defined in `ast_node.hpp` (and implemented in `ast_node.cpp`) as:
 
 ```cpp
 class LambdaNode : public ASTNode {
@@ -213,11 +213,241 @@ The return type of the function call becomes the lambda's return type.
 
 Thus, lambdas are treated on equal footing with named functions—a testament to HULK's consistent first-class function support.
 
-## 4. Justification of Design Decisions
+---
+
+## 4. The Lowering Pass: From `LambdaNode` to a Delegate Object
+
+The semantic phase delivers a type-complete AST where every `LambdaNode` carries its inferred `FunctionType` and a resolved capture environment implied by the symbol table. The front-end, however, does **not** yet translate this into a concrete runtime representation — that is the job of the **lowering pass**, implemented in `lowering/lowering.cpp`.
+
+The lowering visitor is a second AST walk that **rewrites** the tree in-place. It does this through a `parentReference` pointer-to-pointer mechanism: every visit method saves the pointer slot that the parent used to reach the current node, so a visit can atomically splice a completely different subtree into the parent without a separate fixup step.
+
+### 4.1 The Delegate-Object Strategy
+
+HULK lowers every `LambdaNode` into a **heap-allocated delegate object**. The transformation is performed by `LoweringVisitor::visit(LambdaNode&)` and proceeds in three conceptual phases.
+
+#### Phase 1 — Generate a unique `TypeDeclNode`
+
+```
+Delegate_1 (type)
+├── ctor params: every variable currently in scope (the captured environment)
+├── attribute: one field per captured variable (by-value copy)
+└── invoke method: the lambda body, with a wrapper that re-binds captures
+```
+
+A fresh name `Delegate_<N>` is minted via a static counter (e.g., `Delegate_1`, `Delegate_2`, …). This guarantees uniqueness across the compilation unit.
+
+```cpp
+static int delegateId = 0;
+std::string delegateName = "Delegate_" + std::to_string(++delegateId);
+
+auto invokeMethod = new FunctionDeclNode(
+    "invoke",
+    node.params,
+    node.paramTypes,
+    node.declaredReturnType,
+    node.body,
+    true
+);
+invokeMethod->isMethod = true;
+invokeMethod->ownerTypeName = delegateName;
+```
+
+#### Phase 2 — Wrap the body to restore captured variables
+
+Before handing the original lambda body to the `invoke` method, the lowering visitor wraps it in a chain of `LetNode`s that read each captured variable back out of `self`:
+
+```cpp
+auto variablesInScope = scopeTable.getAllVariables();
+// Iterate in reverse so the first variable becomes the outermost let
+for (int i = variablesInScope.size()-1; i >= 0; i--) {
+    auto var  = variablesInScope[i].first;
+    auto type = variablesInScope[i].second;
+
+    auto selfVar      = new VariableNode("self");
+    selfVar->type     = new NominalType(delegateName);
+    auto memberAccess = new MemberAccessNode(selfVar, var);
+    memberAccess->type = type;
+
+    wrappedBody = new LetNode(var, memberAccess, wrappedBody);
+    wrappedBody->type = node.body->type;
+}
+invokeMethod->exprBody = wrappedBody;
+```
+
+Iterating in reverse order ensures the outermost `let` corresponds to the first captured variable, so the nesting matches the original lexical order. The result is a synthetic expression of the form:
+
+```
+let x = self.x in
+  let y = self.y in
+    <original lambda body>
+```
+
+This technique means the body code does not change at all — it still references `x` and `y` as plain variables. The delegate wrapper simply ensures those names are bound before the body executes.
+
+#### Phase 3 — Replace the `LambdaNode` with a `NewNode`
+
+The lowering pass then constructs the full `TypeDeclNode`, populating its constructor parameters and attribute fields from the captured environment:
+
+```cpp
+for (auto [var, type] : variablesInScope) {
+    ctorParams.push_back(var);
+    ctorParamTypes.push_back(type);
+    auto attr = new AttributeDeclNode(var, new VariableNode(var));
+    members.push_back(attr);
+    newArgs.push_back(new VariableNode(var));
+}
+
+auto typeDecl = new TypeDeclNode(delegateName, ctorParams, ...);
+typeDecl->parentType = "Object";
+generatedTypes.push_back(typeDecl);  // injected at front of program decls
+
+ASTNodePtr newNode = new NewNode(delegateName, newArgs);
+newNode->type = new NominalType(delegateName);
+*parentRefCopy = newNode;  // replaces the LambdaNode in the AST
+```
+
+The original `LambdaNode` in the AST is atomically replaced with a plain object-construction expression. From the IR generator's perspective, the lambda has completely vanished.
+
+The `TypeDeclNode` for the delegate is injected at the **front** of `node.decls` in the program node (inside `visit(ProgramNode)`), so it is compiled before any code that references it.
+
+### 4.2 Delegate Call Sites
+
+After lowering, a call like `f(x)` where `f` is a lambda variable needs to dispatch through `invoke` instead of a named function. The semantic visitor records an `overloadNote` of `"Selected functor value: ..."` on any `FunctionCallNode` that resolves to a lambda variable. The lowering pass detects this note:
+
+```cpp
+bool isDelegateCall = false;
+for (const auto& note : node.overloadNotes) {
+    if (note.find("Selected functor value:") != std::string::npos) {
+        isDelegateCall = true;
+        break;
+    }
+}
+
+if (isDelegateCall && !node.receiver) {
+    auto delegateInstance = new VariableNode(node.name);
+    delegateInstance->type = node.resolvedFunctionType;
+    auto invokeCall = new FunctionCallNode("invoke", node.args, delegateInstance);
+    invokeCall->type = node.type;
+    *parentRefCopy = invokeCall;
+}
+```
+
+The call `f(42)` is rewritten to `f.invoke(42)`. Since `invoke` is a regular method on the delegate type, it goes through the standard virtual-dispatch path (`_get_virtual_method`) at the IR level — exactly the same mechanism used for every other method call in HULK.
+
+### 4.3 Method-to-Function Lowering (applied to `invoke`)
+
+The `invoke` method created during lambda lowering is itself subject to the general method-lowering pass in `ir_generator/lowering.cpp`. This pass transforms every OOP-style method `TypeName::methodName(params)` into a flat C-style function `_TypeName_methodName(params, self)` by appending `self` as an explicit trailing parameter:
+
+```cpp
+FunctionDeclNode* methodToFunctionLowering(
+    const std::string& typeName, FunctionDeclNode* method)
+{
+    std::string newName = "_" + typeName + "_" + method->name;
+
+    std::vector<std::string> newParams = method->params;
+    newParams.push_back("self");              // self is the last argument
+
+    std::vector<Type*> newParamTypes = method->paramTypes;
+    newParamTypes.push_back(nullptr);         // pointer-sized; typed at IR level
+
+    // ...
+}
+```
+
+This is the universal calling convention for HULK methods, keeping the QBE IR free of any notion of `this` or implicit receivers. The resulting function for a delegate named `Delegate_1` with an identity body is thus `__Delegate_1_invoke(n, self)`.
+
+---
+
+## 5. The Runtime: How Delegates Execute
+
+The HULK runtime (`runtime/runtime.c`) is a thin C layer on top of the **Boehm–Demers–Weiser garbage collector** and a custom open-addressed hash-map. It knows nothing about lambdas specifically; it only sees the delegate objects that the lowering pass produces.
+
+### 5.1 Allocation via the GC
+
+```c
+void* _hulk_alloc(size_t size) {
+    return GC_malloc(size);  // Boehm GC
+}
+```
+
+When the IR for `new Delegate_1(x, y)` executes, the IR generator emits:
+
+```qbe
+%obj = l call $_hulk_alloc(l <size_of_Delegate_1>)
+storel $Delegate_1, %obj          # store type-id pointer at offset 0
+```
+
+The GC returns a managed pointer; no explicit `free` is ever needed. All delegate objects are automatically reclaimed when no more references to them exist.
+
+### 5.2 Virtual Dispatch via the Vtable Hash-Map
+
+Method identity is handled at runtime through **two global hash maps** initialised in `$main`:
+
+| Map | Key | Value |
+|---|---|---|
+| `vtable_map` | class-id (global symbol address as `long`) | per-class method map |
+| per-class method map | method-id (global symbol address as `long`) | raw function pointer |
+| `inheritance_map` | child class-id | parent class-id |
+
+```c
+void _register_method(long class_id, long method_id, void* method_ptr) {
+    struct hashmap_s* method_map = hashmap_get(&vtable_map, &class_id, sizeof(long));
+    if (method_map == NULL) {
+        method_map = malloc(sizeof(struct hashmap_s));
+        hashmap_create(16, method_map);
+        hashmap_put(&vtable_map, &class_id_copy, sizeof(long), method_map);
+    }
+    hashmap_put(method_map, &method_id_copy, sizeof(long), method_ptr);
+}
+```
+
+At program start, `$main` registers every generated delegate type:
+
+```qbe
+call $_register_inheritance(l $Delegate_1, l $Object)
+call $_register_method(l $Delegate_1, l $invoke, l $__Delegate_1_invoke)
+```
+
+When `f.invoke(42)` executes, the IR:
+
+1. Loads the type-id pointer from offset 0 of `f` (the `class_id`).
+2. Calls `_get_virtual_method(class_id, $invoke)` which walks the inheritance chain via hash-map lookups until it finds the function pointer.
+3. Performs an **indirect call** through that pointer.
+
+```c
+void* _get_virtual_method(long class_id, long method_id) {
+    long current_id = class_id;
+    while (1) {
+        struct hashmap_s* method_map = hashmap_get(&vtable_map, &current_id, sizeof(long));
+        if (method_map) {
+            void* fn = hashmap_get(method_map, &method_id, sizeof(long));
+            if (fn) return fn;
+        }
+        long* parent_ptr = hashmap_get(&inheritance_map, &current_id, sizeof(long));
+        if (!parent_ptr) return NULL;
+        current_id = *parent_ptr;
+    }
+}
+```
+
+### 5.3 Captured Variables in Memory
+
+Each captured variable becomes a field of the delegate struct at a byte offset tracked by the `TypeRegister`. Reading a captured variable (via the `let x = self.x` wrapper) compiles to:
+
+```qbe
+%field_ptr = l add %self, <offset_of_x>
+%x         = d loadd %field_ptr    # 'd' for Number (double), 'w' for Bool/int
+```
+
+Writing back is symmetric. There is no indirection through a "cell" object (unlike Python) — the value is copied directly into the struct at construction time and read back by pointer arithmetic. This is fast but imposes strict **by-value capture** semantics: mutations to the original variable after the delegate is created are invisible inside the lambda, and vice versa.
+
+---
+
+## 6. Justification of Design Decisions
 
 Every implementation choice outlined above stems from deliberate trade-offs. This section justifies those decisions against alternative approaches.
 
-### 4.1 Why Constraint-Based Inference, not Hindley-Milner?
+### 6.1 Why Constraint-Based Inference, not Hindley-Milner?
 
 HULK opts for a bidirectional constraint-based inference (as seen in `refineUnknownExpression`) rather than a full unification-based system like Hindley-Milner (HM).
 
@@ -225,7 +455,7 @@ HULK opts for a bidirectional constraint-based inference (as seen in `refineUnkn
 
 **Trade-off:** Some lambda parameters require explicit annotations, especially if the body does not constrain them (e.g., `function (x) -> x`). This is acceptable because HULK's design philosophy favors explicitness where ambiguity exists, preventing surprising runtime behaviour.
 
-### 4.2 Why Two Syntaxes (`lambda_expr` and `function_expr`)?
+### 6.2 Why Two Syntaxes (`lambda_expr` and `function_expr`)?
 
 While many languages (e.g., Python and JavaScript) use a single syntax for both expression and block bodies, HULK separates them.
 
@@ -233,7 +463,7 @@ While many languages (e.g., Python and JavaScript) use a single syntax for both 
 
 **Programmer Benefit:** The `FUNCTION` keyword visually distinguishes block-oriented anonymous functions from lightweight expression lambdas, making code self-documenting.
 
-### 4.3 Why Not Infer Return Types from All `return` Statements?
+### 6.3 Why Not Infer Return Types from All `return` Statements?
 
 The visitor takes the body's type as the return type. For block bodies, the type is the type of the last expression. If multiple `return` statements exist with different types, the visitor uses `lowestCommonAncestor` to compute a join type.
 
@@ -241,7 +471,7 @@ The visitor takes the body's type as the return type. For block bodies, the type
 
 **Trade-off:** Imperative programmers might find this restrictive. However, explicit return type annotations can always be added to override the inference.
 
-### 4.4 Why Errors for Uninferred Parameters?
+### 6.4 Why Errors for Uninferred Parameters?
 
 Some languages (e.g., Scala with partial unification) allow parameters to remain polymorphic until the call site. HULK does not.
 
@@ -249,31 +479,113 @@ Some languages (e.g., Scala with partial unification) allow parameters to remain
 
 **Outcome:** The error message explicitly points to the parameter and suggests adding an annotation—a clear, actionable diagnostic.
 
-## 5. The Price of Abstraction: Overheads and Limitations
+### 6.5 Why Class-Based Delegates, not Raw Function Pointers?
+
+The lowering strategy converts lambdas into full type declarations with an `invoke` method rather than a struct holding a raw function pointer + void* context (the classic C closure pattern).
+
+**Reason:** This reuses the entire OOP infrastructure — allocation, virtual dispatch, inheritance registration, field layout — that HULK already possesses for user-defined types. There is no special-case code in the IR generator for lambdas: `IrGenerator::visit(LambdaNode&)` is a no-op stub, because by the time the IR generator runs, every `LambdaNode` has already been replaced by a `NewNode`. The implementation complexity is thus paid once (in the lowering pass) rather than scattered across every back-end stage.
+
+**Trade-off:** Each unique lambda in the source creates a brand-new type in the type register and a brand-new set of vtable entries. For programs with many distinct lambdas this inflates the size of the vtable maps and the `$main` initialisation block. A more sophisticated compiler might merge structurally identical delegates into a single type.
+
+---
+
+## 7. The Price of Abstraction: Overheads and Limitations
 
 Lambda expressions are not free. HULK pays several costs, which are important to acknowledge.
 
-### 5.1 Semantic Complexity
+### 7.1 Semantic Complexity
 
 The `visit(LambdaNode)` method, while clear, adds significant complexity to the type inference pass. The visitor must maintain nested scopes correctly, handle the interaction between lambda parameters and outer variables (shadowing), and manage the propagation of constraints across the lambda boundary. This increases the compiler's maintenance burden.
 
-### 5.2 Runtime Overhead
+### 7.2 Runtime Overhead
 
-- **Heap Allocation:** Every lambda instantiation requires allocating a closure object on the heap (or using some form of garbage-collected record). This is more expensive than calling a plain function.
+- **Heap Allocation:** Every lambda instantiation allocates a delegate object via `_hulk_alloc` / `GC_malloc`. This is more expensive than a stack frame, and GC pressure grows with closure frequency.
 
-- **Indirection:** Invoking a lambda involves dereferencing the closure to obtain the function pointer and the captured environment.
+- **Double Indirection for Dispatch:** Invoking a lambda first calls `_get_virtual_method` (a hash-map lookup through the vtable chain), then performs an indirect function call through the returned pointer. Named function calls have neither cost.
 
-- **Optimisation Barriers:** Inlining lambdas across functions is difficult unless the compiler performs aggressive escape analysis and inlining heuristics.
+- **Vtable Bloat:** Each distinct lambda produces one `TypeDeclNode` and entries in both `vtable_map` and `inheritance_map`. A program with many inline callbacks will have a proportionally large initialisation sequence in `$main`.
 
-### 5.3 Diagnostic Challenges
+- **Capture-Copy Cost:** Every variable in scope at the lambda definition site is copied into the delegate struct at object-construction time. For large captured environments this is non-trivial.
 
-When an error occurs inside a lambda, the programmer sees a stack trace involving anonymous functions. Providing meaningful location information (`span`) mitigates this, but understanding the closure's state still requires mental effort.
+- **Optimisation Barriers:** Because `invoke` is resolved via `_get_virtual_method` at runtime, the IR generator cannot inline the call or specialise it. A C++ compiler, by contrast, knows the concrete closure type at compile time and can inline `operator()` entirely.
 
-### 5.4 Inference Limitations
+### 7.3 Diagnostic Challenges
+
+When an error occurs inside a lambda, the programmer sees a stack trace involving anonymous functions and synthesized type names like `Delegate_3`. Providing meaningful location information (`span`) mitigates this, but understanding the closure's state still requires mental effort.
+
+### 7.4 Inference Limitations
 
 As noted, lambdas with insufficient constraints fail compilation. This is a deliberate trade-off to keep the system simple, but it can be frustrating for developers accustomed to fully inferred functional languages.
 
-## Comparison with other languages
+### 7.5 The Over-Capture Problem
+
+Because `getAllVariables()` in `common/scope_table.hpp` returns **all** variables visible at the lambda definition site — including ones the lambda body never references — the generated delegate struct is larger than necessary. Consider:
+
+```hulk
+let big_array = ... in
+let small_x   = 5   in
+let f = (n) -> n + small_x in  // only uses small_x
+f(10)
+```
+
+The lowering pass will capture both `big_array` and `small_x` into the `Delegate_N` struct, even though `big_array` is never read inside `f`. In languages like C++ this is caught at compile time (you must list captures explicitly), but HULK has no mechanism to warn about or eliminate unnecessary captures.
+
+**Consequence:** Objects live longer than necessary (the delegate holds a reference that prevents GC collection of `big_array`), struct sizes are inflated, and the construction call at the `NewNode` evaluates and copies every in-scope variable. For large or deeply nested scopes, this can be significant.
+
+**Potential fix:** A free-variable analysis pass (similar to `freeVars()` in lambda calculus implementations) could compute the minimal capture set before the lowering visitor runs, so only genuinely referenced variables become delegate fields.
+
+---
+
+## 8. The Full Pipeline at a Glance
+
+The following diagram shows the complete lifecycle of a lambda expression through the compiler:
+
+```
+Source text
+    |
+    v
++-----------+
+|  Parser   |  Creates LambdaNode with params, body, optional annotations
++-----------+
+    |
+    v
++------------------------+
+| TypeInferenceVisitor   |  Resolves param/return types via constraint propagation
+| (Semantic Phase)       |  Sets node.functionType
+|                        |  Free variables resolved via symTable scoping
++------------------------+
+    |
+    v
++------------------------+
+| LoweringVisitor        |  Rewrites LambdaNode --> NewNode(Delegate_N)
+| (lowering/lowering.cpp)|  Generates TypeDeclNode with invoke method + captured fields
+|                        |  Wraps body: let x = self.x in ... let y = self.y in <body>
+|                        |  Rewrites call sites: f(x) --> f.invoke(x)
++------------------------+
+    |
+    v
++------------------------+
+| IrGenerator            |  visit(LambdaNode) is a no-op -- already lowered
+| (Code Gen Phase)       |  NewNode --> _hulk_alloc + field initialization
+|                        |  f.invoke(x) --> _get_virtual_method + indirect call
++------------------------+
+    |
+    v
++------------------------+
+| QBE IR                 |  Flat C-like IR; no lambda concept remains
++------------------------+
+    |
+    v
++------------------------+
+| runtime.c              |  GC allocation, vtable lookup, string helpers
++------------------------+
+```
+
+The key insight is the **strict phase separation**: the semantic phase handles _what_ a lambda means; the lowering phase handles _how_ it is represented; the IR generator handles _how_ that representation maps to machine operations; and the runtime handles _how_ those operations execute safely.
+
+---
+
+## 9. Comparison with Other Languages
 
 ## C#: Delegate-Based Pragmatism
 
@@ -348,24 +660,21 @@ Second, it prevents accidental captures—the programmer must consciously decide
 
 While lambdas themselves impose no runtime overhead, C++ provides `std::function` as a type-erased wrapper for any callable object. This convenience comes at a cost: `std::function` involves heap allocation, virtual dispatch, and type erasure. The C++ standards committee has even considered `std::reference_closure` as a performance optimization for specific use cases. The lesson is clear: the lambda itself is zero-cost, but the abstractions built atop it may not be.
 
-## Comparative Analysis
+---
+
+## 10. Comparative Analysis
 
 ### Performance
 
-| Aspect             | HULK                        | C#                          | Python                   | C++                      |
-| ------------------ | --------------------------- | --------------------------- | ------------------------ | ------------------------ |
-| Closure allocation | Heap (by-value)             | Heap (by-value)             | Heap (cell objects)      | Stack or heap (explicit) |
-| Capture overhead   | Indirection through closure | Indirection through closure | Indirection through cell | Direct member access     |
-| Zero-cost capture  | No                          | No (except static)          | No                       | Yes (stateless lambdas)  |
-| Inlining potential | Limited                     | JIT-dependent               | None                     | Excellent                |
+| Aspect             | HULK                           | C#                          | Python                   | C++                      |
+| ------------------ | ------------------------------ | --------------------------- | ------------------------ | ------------------------ |
+| Closure allocation | Heap (GC-managed)              | Heap (GC-managed)           | Heap (cell objects)      | Stack or heap (explicit) |
+| Capture overhead   | Field copy into delegate       | Field copy into closure     | Indirection through cell | Direct member access     |
+| Zero-cost capture  | No                             | No (except static)          | No                       | Yes (stateless lambdas)  |
+| Dispatch overhead  | vtable hash-map + indirect call| JIT inline cache            | Dynamic dispatch          | Inlined at compile time  |
+| Inlining potential | None (virtual dispatch)        | JIT-dependent               | None                     | Excellent                |
 
-C++ achieves the highest performance because lambdas are resolved entirely at compile time; the closure object is a concrete type, and the compiler can inline the `operator()` call.
-
-C# achieves good performance through JIT optimization, but heap allocation for closures remains a cost.
-
-HULK, as a compiled language, could potentially inline small lambdas, but the heap-allocated closure representation introduces indirection.
-
-Python pays the highest cost due to dynamic dispatch and cell indirection.
+HULK's double-indirection (vtable hash-map lookup + indirect call) places it below C# in raw dispatch performance, despite both using heap allocation. C# benefits from JIT inline caching that learns the concrete type; HULK's runtime vtable uses a generic hash-map with no such learning.
 
 ### Type Safety and Inference
 
@@ -382,15 +691,16 @@ Python's dynamic typing means no static inference is performed at all—errors m
 
 ### Capture Semantics
 
-| Aspect          | HULK                | C#                  | Python                      | C++                                 |
-| --------------- | ------------------- | ------------------- | --------------------------- | ----------------------------------- |
-| Default capture | By-value (implicit) | By-value (implicit) | By-reference (late binding) | Explicit (by-value or by-reference) |
-| Capture control | None                | Static modifier     | Workarounds                 | Full control                        |
-| Memory safety   | Safe                | Safe                | Safe (but can leak)         | Requires care (dangling references) |
+| Aspect          | HULK                       | C#                  | Python                      | C++                                 |
+| --------------- | -------------------------- | ------------------- | --------------------------- | ----------------------------------- |
+| Default capture | By-value (implicit)        | By-value (implicit) | By-reference (late binding) | Explicit (by-value or by-reference) |
+| Capture control | None                       | Static modifier     | Workarounds                 | Full control                        |
+| Over-capture    | Yes (all in-scope vars)    | No (used vars only) | N/A (by-ref)                | No (explicit list)                  |
+| Memory safety   | Safe (GC)                  | Safe (GC)           | Safe (but can leak)         | Requires care (dangling references) |
 
 C++ provides the most control but also the most responsibility—capturing by reference can lead to dangling references if the lambda outlives the captured scope.
 
-HULK's by-value capture is safe but inflexible.
+HULK's by-value capture is safe but inflexible, and the over-capture problem (§7.5) sets it apart even from C#, which only captures variables that the lambda body actually uses.
 
 C# provides a reasonable default with static lambdas as an optimization.
 
@@ -409,7 +719,9 @@ C# uniquely supports expression trees, enabling runtime metaprogramming.
 
 HULK and C++ support full statement bodies, while Python restricts lambdas to single expressions.
 
-## Philosophical Implications
+---
+
+## 11. Philosophical Implications
 
 The divergent implementations reveal deeper philosophical commitments.
 
@@ -419,4 +731,4 @@ C# treats lambdas as a runtime abstraction—a way to create delegate instances 
 
 Python treats lambdas as a lightweight syntactic convenience—a way to avoid defining trivial functions. The philosophy is _"simplicity first"_: lambdas are not a core abstraction but a tool for specific use cases. This explains their syntactic limitations and the surprising late-binding behavior, which is a consequence of Python's uniform treatment of scopes.
 
-HULK treats lambdas as a first-class citizen in a hybrid language—a bridge between functional and object-oriented paradigms. The philosophy is _"local reasoning"_: make the compiler's behavior predictable, force explicitness when ambiguity arises, and provide clear diagnostics. This explains the constraint-based inference that refuses to guess at the call site.
+HULK treats lambdas as a first-class citizen in a hybrid language—a bridge between functional and object-oriented paradigms. The philosophy is _"local reasoning"_: make the compiler's behavior predictable, force explicitness when ambiguity arises, and provide clear diagnostics. The lowering strategy reinforces this: by reusing the type system's own machinery (types, constructors, method dispatch), HULK avoids special-casing lambdas in the IR generator and the runtime, at the cost of heavier per-lambda overhead and the over-capture problem. This trade-off is consistent with HULK's position as a teaching/research compiler where clarity of implementation outweighs peak performance.
