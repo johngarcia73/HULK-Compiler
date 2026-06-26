@@ -18,7 +18,10 @@ The compiler must answer several fundamental questions: _How does the semantic v
 ### 1.1 Eliminating the "Nominal Ceremony"
 
 Without lambdas, higher‑order functions force programmers to pollute the namespace with single‑use function definitions. In HULK, writing:
+```js
 function apply_twice(f: (Number) -> Number, x: Number): Number { f(f(x)); }
+```
+
 would require a separate definition for every transformation. With lambdas, the transformation is expressed **in situ**, reducing indirection and improving locality. This directly aligns with the principle of **cohesion**: the behaviour is placed exactly where it is relevant.
 
 ### 1.2 Enabling Custom Control Structures
