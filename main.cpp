@@ -1,7 +1,7 @@
 #include "compiler/frontend_pipeline.hpp"
 #include "ir_generator/ir_generator.hpp"
 #include "lowering/lowering.hpp"
-#include "CLI11.hpp"          // <-- add this
+#include "CLI11.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <string>
